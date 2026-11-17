@@ -282,7 +282,9 @@ test("the running-job limit refuses new asks", async () => {
   const [first] = await mcp([call(1, "ask", { agent: "fake", prompt: "SLOW", wait_s: 0 })]);
   assert.match(textOf(first), /Job /);
   const [second] = await mcp([call(1, "ask", { agent: "fake", prompt: "hi" })], { CONNECT_ANYTHING_MAX_RUNNING: "1" });
-  assert.match(textOf(second), /already running \(limit 1\)/);
+  assert.match(textOf(second), /already running \(limit 1\)/);  // Cloud jobs don't use this machine, so a full local limit doesn't refuse them (this one fails later, for its missing key).
+  const [cloud] = await mcp([call(1, "ask", { agent: "devin-cloud", prompt: "hi" })], { CONNECT_ANYTHING_MAX_RUNNING: "1", DEVIN_API_KEY: "", DEVIN_ORG_ID: "" });
+  assert.doesNotMatch(textOf(cloud), /already running/);
 });
 
 test("read-only runs are told so, and an answer cut short by a refused tool is flagged", async () => {
@@ -293,4 +295,27 @@ test("read-only runs are told so, and an answer cut short by a refused tool is f
   const id = readdirSync(path.join(process.env.CONNECT_ANYTHING_HOME, "jobs")).find((d) => d.startsWith("stopper-"));
   const prompt = readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "jobs", id, "prompt.txt"), "utf8");
   assert.match(prompt, /Read-only run/);
+});
+
+test("antigravity: read-only = plan mode + request-review permissions, prompt bound to -p, long prompts go in a readable file, JSON reply parsed", async () => {
+  const { LOCAL_AGENTS, ARG_PROMPT_MAX } = await import("../src/agents/local.mjs");
+  const ag = LOCAL_AGENTS.find((a) => a.id === "antigravity");
+  assert.equal(ag.readOnly, "enforced");
+  const ro = ag.build({ prompt: "--mode accept-edits", promptFile: "P" }).args;
+  assert.equal(ro[0], "-p=--mode accept-edits"); // a prompt that looks like a flag stays the prompt
+  assert.equal(ro[ro.indexOf("--mode") + 1], "plan");
+  // plan mode alone wrote files in a real check; the session permission override is the gate
+  assert.deepEqual(JSON.parse(ro.find((a) => a.startsWith("--settings=")).slice(11)), { toolPermission: "request-review" });
+  const rw = ag.build({ prompt: "x", promptFile: "P", write: true }).args;
+  assert.equal(rw[rw.indexOf("--mode") + 1], "accept-edits");
+  assert.ok(!rw.some((a) => a.startsWith("--settings")) && !rw.includes("--dangerously-skip-permissions"));
+  const long = "x".repeat(ARG_PROMPT_MAX + 1);
+  const lg = ag.build({ prompt: long, promptFile: path.join("jobs", "j1", "prompt.txt") }).args;
+  assert.ok(!lg.some((a) => a.includes(long)) && lg[0].includes("prompt.txt") && lg[lg.indexOf("--add-dir") + 1] === path.join("jobs", "j1"));
+  const ok = JSON.stringify({ conversation_id: "c", status: "SUCCESS", response: "PONG\n", duration_seconds: 2, num_turns: 1 });
+  assert.deepEqual(ag.parse("noise\n" + ok + "\n"), { text: "PONG" });
+  assert.ok(ag.parse('{"status":"ERROR","error":"quota"}').error.includes("quota"));
+  assert.ok(ag.parse("Error: not signed in").error.includes("not signed in"));
+  const denied = ag.parse(JSON.stringify({ status: "SUCCESS", response: "", denied_actions: [{ action: "command", display_name: "Bash" }] }));
+  assert.ok(denied.error.includes("Bash"), "an empty answer cut off by a denied tool is an error, not an empty reply");
 });

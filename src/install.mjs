@@ -112,6 +112,11 @@ export const HARNESSES = {
     detect: () => !!cmdOf("grok"),
     install: (o) => viaCli("grok", ["mcp", "add", "-s", "user", NAME, "--", SERVER.command, ...SERVER.args], ["mcp", "remove", "-s", "user", NAME], o),
   },
+  antigravity: {
+    name: "Antigravity (agy)",
+    detect: () => !!cmdOf("antigravity"),
+    install: (o) => viaCli("antigravity", ["mcp", "add", NAME, "--", SERVER.command, ...SERVER.args], ["mcp", "remove", NAME], o),
+  },
   hermes: {
     name: "Hermes Agent",
     detect: () => !!cmdOf("hermes"),

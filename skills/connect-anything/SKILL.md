@@ -1,6 +1,6 @@
 ---
 name: connect-anything
-description: Ask the user's other coding agents (Claude Code, Codex, Devin, Cursor, OpenCode, OMP) through their own CLIs and sign-ins - for a second opinion, a review of a diff, a council of several agents, or handing off a task. Use when the user says "ask codex/claude/devin/cursor...", "get a second opinion", "have another agent review this", "get a council", "hand this to Devin", or wants another vendor's view.
+description: Ask the user's other coding agents (Claude Code, Codex, Devin, Cursor, Antigravity, OpenCode, OMP) through their own CLIs and sign-ins - for a second opinion, a review of a diff, a council of several agents, or handing off a task. Use when the user says "ask codex/claude/devin/cursor/antigravity...", "get a second opinion", "have another agent review this", "get a council", "hand this to Devin", or wants another vendor's view.
 ---
 
 # connect-anything

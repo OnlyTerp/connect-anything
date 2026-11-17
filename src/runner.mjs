@@ -13,7 +13,7 @@ const READ_ONLY_NOTE =
   "[Read-only run: you can read files but not edit them, and commands or tests may be refused. If a tool is refused, answer from reading the code instead of stopping.]\n\n";
 /** For CLIs whose read-only mode refuses every shell command (a refused call can end their turn). */
 const NO_COMMANDS_NOTE =
-  "[Read-only run: you can read files, but running commands or tests and editing files will be refused. Answer from reading the code; do not try to run anything.]\n\n";
+  "[Read-only run: you can read files, but running commands or tests and editing files will be refused. Answer from reading the code with your file-reading tools; do not try to run anything or call MCP tools.]\n\n";
 
 /** Signs on stderr that the CLI refused a tool call because the run is read-only. */
 const REFUSED_TOOL = /rejected a tool call|requires (confirmation|approval)|permission (denied|required)|not allowed in (plan|ask|read-only) mode/i;

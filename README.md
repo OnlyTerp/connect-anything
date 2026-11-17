@@ -4,7 +4,7 @@
 
 **Let the coding agent you're in ask your other agents.**
 
-You already pay for Claude Code, Codex, Devin, Cursor. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
+You already pay for Claude Code, Codex, Devin, Cursor, Antigravity. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
 
 ```text
 $ connect-anything ask devin,cursor --staged "Review this diff for bugs. Be brief."
@@ -24,7 +24,7 @@ Skipping `price === 0` is reasonable if free lines should not affect the total. 
 
 *A real run from 17 November 2026, trimmed. Both agents found the crash and disagreed about the skip; your agent sees both answers and can weigh them.*
 
-- **One MCP server, one skill.** Add it to Claude Code, Codex, Cursor, Devin, OpenCode, Grok or Claude Desktop, or call it from any shell.
+- **One MCP server, one skill.** Add it to Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok or Claude Desktop, or call it from any shell.
 - **Your own sign-ins.** Each agent runs through its own CLI, logged in as you. No API keys, and connect-anything never reads another tool's tokens.
 - **Read-only by default.** Write access is opt-in per call. Agents with no read-only mode refuse to run without it.
 - **Zero dependencies.** Plain Node 18 or newer. Nothing to compile.
@@ -85,15 +85,20 @@ The bundled skill (`skills/connect-anything/SKILL.md`) teaches agents when to us
 | `devin` | Devin CLI | `devin -p --prompt-file` | `auto` permissions | tested, CLI 3000.4.25 |
 | `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ask mode | tested, CLI 2026.11.13 |
 | `omp` | OMP | `omp -p --mode json` | none: needs `write: true` | tested |
+| `antigravity` | Antigravity | `agy -p --output-format json` | plan mode + `request-review` permissions | tested, CLI 1.5.10 |
 | `opencode` | OpenCode | `opencode run --format json` | none: needs `write: true` | preview |
 | `hermes` | Hermes Agent | `hermes -z` | none: needs `write: true` | preview |
 | `grok` | Grok CLI | `grok --prompt-file` | plan mode | preview (did not answer headless in our check) |
 
 *Tested* means a real call went through connect-anything and came back right, on Windows 11, in November 2026. CI runs the test suite on Windows, macOS and Linux, but real agent calls were only made on Windows: reports from macOS and Linux are very welcome ([open one here](https://github.com/OnlyTerp/connect-anything/issues/new?template=agent-report.yml)).
 
-**As the caller**, Claude Code was checked end to end: given the server with `--mcp-config`, it asked a Devin + Cursor council about a staged diff and summarised where they agreed and disagreed. Other apps are registered by `install` the same way but haven't been checked as callers yet.
+**As the caller**, two apps were checked end to end:
+- **Claude Code**, given the server with `--mcp-config`, asked a Devin + Cursor council about a staged diff and summarised where they agreed and disagreed.
+- **Antigravity**, after `connect-anything install antigravity` (which runs `agy mcp add`), called `agents`, then `ask` with Codex on a staged diff, and quoted Codex's reply. Started as a called agent (depth 1), its `ask` was refused, so the one-hop guard reaches agy's MCP servers.
 
-Long prompts are never cut. Agents that take the prompt as an argument get it as a file when it's long (OpenCode, OMP), or refuse with a clear message (Cursor, Hermes).
+Other apps are registered by `install` the same way but haven't been checked as callers yet.
+
+Long prompts are never cut. Agents that take the prompt as an argument get it as a file when it's long (OpenCode, OMP, Antigravity: checked with a 31,800-character prompt), or refuse with a clear message (Cursor, Hermes).
 
 **How read-only was checked.** Each agent was asked to create a file, once with its file tool and once with a shell command, in read-only mode, and once with `write: true` as a control:
 
@@ -102,6 +107,9 @@ Long prompts are never cut. Agents that take the prompt as an argument get it as
 | Claude Code (plan mode) | blocked | blocked | file created |
 | Devin (`auto`) | blocked | blocked | file created |
 | Cursor (ask mode) | refused | refused | file created |
+| Antigravity (plan + `request-review`) | refused | refused | file created |
+
+Antigravity's plan mode alone is not a gate: on a machine whose Antigravity tool permission was "always proceed", plan-mode runs created files both ways. So read-only runs also set that session's tool permission to `request-review` (never saved): edits and commands then need an approval a headless run can't give, and the run stops with a clear error. Commands you have always-allowed in Antigravity's own settings still follow your rules.
 
 Called agents run with your own hooks, rules and settings for that CLI, so they behave as they would if you ran them yourself.
 
@@ -135,7 +143,9 @@ Each line below is covered by a test in `test/basic.test.mjs` or was checked by 
   - Codex: called runs switch the server off (`-c mcp_servers.connect-anything.enabled=false`); it was never started.
   - Cursor: called runs don't pass `--approve-mcps`; the server was never started.
   - Devin: the server starts at depth 1, so `ask` is refused.
-  - OpenCode, OMP, Hermes: not checked. The 6-job limit is the backstop. *(tested)*
+  - Antigravity: agy passes the depth to its MCP servers, so `ask` is refused.
+  - OpenCode, OMP, Hermes: not checked. The running-job limit is the backstop. *(tested)*
+- **A limit on running jobs.** At most 6 local jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`), because they share your machine. Cloud jobs run on the vendor's machines and have their own limit of 20 (`CONNECT_ANYTHING_MAX_CLOUD_RUNNING`). *(tested)*
 - **Replies are framed as untrusted.** Every answer arrives as `<<reply agent=X id=N untrusted>> ... <<end N>>` with a random id, and fake markers inside an answer are defused, so one agent's reply can't pose as another's. *(tested)*
 - **No shell.** Agents are started with an argument list, never through a shell, so a prompt can't inject commands. *(tested: a prompt full of shell syntax arrives verbatim and nothing in it runs)*
 - **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin, and needs a token for every call; the setup page holds no token. *(token checks tested)*
@@ -172,7 +182,7 @@ cloudflared tunnel --url http://127.0.0.1:7777          # or any tunnel you trus
 connect-anything serve --public-host your-name.trycloudflare.com
 ```
 
-The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. This route is tested with `curl` and the setup page, not yet through a real tunnel and connector.
+The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. Checked with a real MCP client over HTTP on this machine: Claude Code, given the URL and token, called `ask` and Devin's review came back. Not yet checked through a public tunnel, or from any named assistant app (ChatGPT, Claude, Grok and others each need their custom-connector setting turned on, which is up to you).
 </details>
 
 ## Where things live

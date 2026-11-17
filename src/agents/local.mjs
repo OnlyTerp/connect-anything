@@ -244,6 +244,44 @@ export const LOCAL_AGENTS = [
       }
     },
   },
+  {
+    id: "antigravity",
+    name: "Antigravity (agy)",
+    goodFor: "Google's Antigravity agent, on your Antigravity plan.",
+    // Plan mode alone is no gate (with "always proceed" permissions it still wrote files), so read-only
+    // runs also set the session's tool permission to request-review: edits and commands then need an
+    // approval a headless run can't give, and are refused. Reads in the folder are still allowed.
+    readOnly: "enforced",
+    refusesCommandsReadOnly: true,
+    install: "Install Antigravity; its command-line tool is `agy`.",
+    signIn: "Open Antigravity (or run `agy`) once and sign in.",
+    locate: () => locate("antigravity", "agy", [isWin ? path.join(LOCAL, "agy/bin/agy.exe") : null]),
+    signedIn: () => null,
+    // agy takes the prompt only as -p's value; a long prompt goes in a file it is allowed to read.
+    build: ({ model, write, prompt, promptFile }) => ({
+      args: [
+        `-p=${prompt.length > ARG_PROMPT_MAX ? `${FILE_TASK} The file is ${promptFile}` : prompt}`,
+        ...(write ? ["--mode", "accept-edits"] : ["--mode", "plan", '--settings={"toolPermission":"request-review"}']),
+        "--output-format", "json",
+        "--print-timeout", "30m",
+        ...(prompt.length > ARG_PROMPT_MAX ? ["--add-dir", path.dirname(promptFile)] : []),
+        ...(model ? ["--model", model] : []),
+      ],
+      stdin: false,
+    }),
+    parse: (stdout) => {
+      let o;
+      try {
+        o = JSON.parse(stdout.slice(stdout.indexOf("{"), stdout.lastIndexOf("}") + 1));
+      } catch {
+        return { error: stdout.trim().slice(-400) || "Antigravity gave no answer" };
+      }
+      const denied = (o.denied_actions || []).map((d) => d.display_name || d.action).filter(Boolean);
+      if (o.status === "SUCCESS" && o.response?.trim()) return { text: o.response.trim() };
+      if (denied.length) return { error: `Antigravity stopped when ${[...new Set(denied)].join(", ")} was refused: that needs an approval a headless run can't give. Read-only runs refuse edits, commands and MCP tools; for a change, ask again with write: true (Antigravity's own permission settings then apply).` };
+      return { error: o.error?.message || o.error || `Antigravity ended with status ${o.status || "unknown"}` };
+    },
+  },
 ];
 
 /** Is connect-anything one of Codex's configured MCP servers? (Reads config.toml, never auth.json.) */

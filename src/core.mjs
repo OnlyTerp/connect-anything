@@ -11,8 +11,10 @@ import path from "node:path";
 
 /** How deep a chain of agents calling agents may go (A asks B asks C...). */
 export const MAX_DEPTH = Number(process.env.CONNECT_ANYTHING_MAX_DEPTH || 1);
-/** How many jobs may run at once, across every caller. A runaway loop hits this wall. */
+/** How many local jobs may run at once on this machine, across every caller. A runaway loop hits this wall. */
 export const MAX_RUNNING = Number(process.env.CONNECT_ANYTHING_MAX_RUNNING || 6);
+/** Cloud jobs run on the vendor's machines, not this one, so they have their own (higher) limit. */
+export const MAX_CLOUD_RUNNING = Number(process.env.CONNECT_ANYTHING_MAX_CLOUD_RUNNING || 20);
 /** A council asks at most this many agents at once. */
 export const MAX_COUNCIL = 3;
 /** Largest diff `diff:` will attach. */
@@ -150,9 +152,11 @@ async function startOne({ agent, prompt, cwd, model, write = false, repo, branch
   if (depth >= MAX_DEPTH) {
     throw new Error(`Refused: you were called by another agent through connect-anything, and called agents can't call further agents (this prevents loops). Answer with what you have.`);
   }
-  const running = runningCount();
-  if (running >= MAX_RUNNING) {
-    throw new Error(`Refused: ${running} jobs are already running (limit ${MAX_RUNNING}). Wait for one to finish or cancel one.`);
+  const cloud = a.kind === "cloud";
+  const running = runningCount(cloud);
+  const limit = cloud ? MAX_CLOUD_RUNNING : MAX_RUNNING;
+  if (running >= limit) {
+    throw new Error(`Refused: ${running} ${cloud ? "cloud" : "local"} jobs are already running (limit ${limit}). Wait for one to finish or cancel one.`);
   }
   const dir = path.resolve(cwd || process.cwd());
   if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`cwd is not a folder: ${dir}`);
@@ -165,7 +169,8 @@ async function startOne({ agent, prompt, cwd, model, write = false, repo, branch
   return startJob({ agent: a.id, kind: a.kind, prompt, cwd: dir, model: model || null, write: !!write, repo: repo || null, branch: branch || null, caller: caller || null, depth: depth + 1 });
 }
 
-const runningCount = () => listJobs({ limit: 200 }).filter((j) => !isFinal(j) && !stale(j)).length;
+/** Running jobs of one kind: local ones share this machine, cloud ones don't. */
+const runningCount = (cloud = false) => listJobs({ limit: 500 }).filter((j) => (j.kind === "cloud") === cloud && !isFinal(j) && !stale(j)).length;
 
 /**
  * Ask one agent (`agent`) or a council of up to 3 (`agents`). With `diff`, the git diff of cwd is
