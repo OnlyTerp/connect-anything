@@ -1,5 +1,7 @@
 # connect-anything
 
+[![ci](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml/badge.svg)](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml) ![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen) ![license MIT](https://img.shields.io/badge/license-MIT-blue)
+
 **Let the coding agent you're in ask your other agents.**
 
 You already pay for Claude Code, Codex, Devin, Cursor. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
