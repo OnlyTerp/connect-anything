@@ -1,5 +1,5 @@
 // A tiny shared inbox so agents and assistants connected to the same connect-anything can leave
-// each other notes (e.g. a cloud assistant over HTTP leaves a task note; Claude Code picks it up).
+// notes for one another (e.g. a cloud assistant over HTTP leaves a task note; Claude Code picks it up).
 // One JSONL file per inbox under <home>/inbox/.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

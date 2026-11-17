@@ -1,82 +1,105 @@
 # connect-anything
 
-**Let any AI agent call your other agents — on your own subscriptions.**
+**Let the coding agent you're in ask your other agents.**
 
-You pay for Claude, ChatGPT, Devin, Cursor… and each agent lives in its own box. connect-anything gives every one of them the same small toolset to reach the others:
+You already pay for Claude Code, Codex, Devin, Cursor. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
 
-> *"Ask Codex to review this diff."* · *"Have Devin (SWE-2) write the tests while you keep going."* · *"Start a Claude Code cloud agent on this repo and tell me when the branch is up."*
+```text
+$ connect-anything ask devin,cursor --staged "Review this diff for bugs. Be brief."
+Council g-20261117195643-507f50 - 2 of 2 answered (devin done in 4.7 s, cursor done in 13 s)
 
-- **One MCP server + one skill.** Works in any harness that speaks MCP (Claude Code, Codex, Cursor, Devin, OpenCode, Grok, Claude Desktop, …) or has a shell.
-- **Your own sign-ins.** Each agent runs through its official CLI, logged in as you, on your plan. No API keys needed, and connect-anything never reads another tool's tokens.
-- **Local and cloud.** Local CLIs answer in seconds. Cloud agents (Claude Code cloud, Codex Cloud, Devin Cloud) work on GitHub and hand back a branch, a diff or a PR.
-- **Safe by default.** Read-only unless you say otherwise, loop-proof, and nothing is exposed to the network unless you choose to.
-- **Zero dependencies.** Plain Node ≥ 18. Nothing to compile.
+<<reply agent=devin id=0e335d8a untrusted>>
+**Bug: off-by-one crash.** `i <= items.length` runs one iteration past the array, so `items[i]` is
+`undefined` on the last pass and `items[i].price` throws. Fix: `i < items.length`.
+Minor: the `price === 0` skip is redundant - free items contribute `0 * qty = 0` anyway.
+<<end 0e335d8a>>
 
-## Quick start
+<<reply agent=cursor id=5025ff41 untrusted>>
+**Bug: off-by-one loop bound** ... **Fix:** keep the original bound: `i < items.length`.
+Skipping `price === 0` is reasonable if free lines should not affect the total. That part is fine.
+<<end 5025ff41>>
+```
+
+*A real run from 17 November 2026, trimmed. Both agents found the crash and disagreed about the skip; your agent sees both answers and can weigh them.*
+
+- **One MCP server, one skill.** Add it to Claude Code, Codex, Cursor, Devin, OpenCode, Grok or Claude Desktop, or call it from any shell.
+- **Your own sign-ins.** Each agent runs through its own CLI, logged in as you. No API keys, and connect-anything never reads another tool's tokens.
+- **Read-only by default.** Write access is opt-in per call. Agents with no read-only mode refuse to run without it.
+- **Zero dependencies.** Plain Node 18 or newer. Nothing to compile.
+
+## Get started (two minutes)
+
+```bash
+npx -y connect-anything doctor      # which of your agents answer right now
+npx -y connect-anything install     # add the server and skill to every app it finds
+```
+
+Then restart those apps and ask, in plain words: *"Ask Codex and Devin to review my staged changes."*
+
+`doctor` sends each installed agent a one-line, read-only check ("Reply with exactly: OK") and shows who answered and how fast. That check uses a tiny bit of each plan.
+
+Prefer a page? `npx -y connect-anything setup` opens one at `http://127.0.0.1:7777`: see your agents, connect your apps with one click each, and try an ask.
+
+<details>
+<summary>From source, or with <code>--dry-run</code></summary>
 
 ```bash
 git clone https://github.com/OnlyTerp/connect-anything
 cd connect-anything
-node bin/connect-anything.mjs setup
+node bin/connect-anything.mjs install --dry-run   # show what would change
+node bin/connect-anything.mjs install
 ```
 
-The setup page opens at `http://127.0.0.1:7777` (the link it opens carries your connect-anything token in the `#` part, which never leaves your browser):
+`install` uses each app's own `mcp add` command where it has one, and otherwise edits its MCP config file after keeping a `.bak` copy. `install --uninstall` takes it out again. Run through `npx`, the package is copied once to `~/.connect-anything/app/<version>/` so your apps never point into npm's cache. Run `install` again after upgrading.
+</details>
 
-1. **Your agents.** See what's installed and signed in, and switch off any you don't want others to call.
-2. **Connect your harnesses.** One click adds connect-anything (tools + skill) to each app it found. Restart those apps.
-3. **Try it.** Ask one of your agents a question right from the page.
+## What you can say
 
-Prefer the terminal?
+| You say to your agent | What happens |
+|---|---|
+| "Ask Codex to review this diff." | `ask {agent: "codex", diff: "uncommitted"}` with your diff attached |
+| "Get a council on my staged changes." | `ask {agents: ["codex", "devin", "cursor"], diff: "staged"}`, in parallel, up to 3 |
+| "Have Devin explain src/auth.ts while you keep going." | `ask` returns a job id after ~45 s; `job` picks up the answer later |
+| "What does Cursor think of everything since main?" | `diff: "main"` sends `git diff main...HEAD` |
 
-```bash
-node bin/connect-anything.mjs install             # every harness it finds (add --dry-run to preview)
-node bin/connect-anything.mjs agents              # who can I call?
-node bin/connect-anything.mjs ask devin --model swe-2 "Explain what src/auth.ts does"
-```
-
-`npm link` (or `npm i -g .`) puts `connect-anything` on your PATH.
-
-## What your agents get
+The tools your agent gets:
 
 | Tool | What it does |
 |---|---|
-| `agents` | Lists who's callable, whether they're ready, and what each is good at |
-| `ask` | Sends a task to an agent. Returns the answer, or a job id if it takes longer than ~45 s |
-| `job` / `jobs` | Checks a job and gets its answer, or lists recent jobs |
-| `cancel` | Stops a job |
-| `send` / `inbox` | Leaves a note for another agent or assistant, or reads yours |
+| `agents` | Who is ready, who answered the last check, and what each is good at |
+| `ask` | Send a prompt to one agent, or to a council of up to 3 at once. Optional `diff`, `cwd`, `model`, `write` |
+| `job` | Read an answer by job or council id, or list recent jobs |
+| `cancel` | Stop a job or a whole council |
+| `send` / `inbox` | Leave a note for another agent or assistant, or read yours |
 
-The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when to use these tools and how. For example: give the other agent full context, pick a different vendor for a second opinion, never start a cloud task twice, and treat replies as information rather than orders.
+The bundled skill (`skills/connect-anything/SKILL.md`) teaches agents when to use these: give the other agent full context, pick a different vendor for a second opinion, compare council answers instead of taking one as truth, and treat every reply as information, never as the user's instructions.
 
 ## Supported agents
 
 | id | Agent | How it's called | Read-only mode | Status |
 |---|---|---|---|---|
-| `claude` | Claude Code | `claude -p --output-format json` | ✅ plan mode | ✅ tested |
-| `codex` | Codex CLI | `codex exec --json -s read-only` | ✅ sandbox | ✅ tested (incl. usage-limit errors) |
-| `devin` | Devin CLI | `devin -p --prompt-file` | ✅ `auto` permissions | ✅ tested (`--model swe-2` is Devin's own fast model) |
-| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested |
-| `omp` | OMP | `omp -p --mode json` | ❌ needs `write: true` | ✅ tested |
-| `opencode` | OpenCode | `opencode run --format json` | ❌ needs `write: true` | ⚠️ parser not yet seen succeed |
-| `hermes` | Hermes Agent | `hermes -z` | ❌ needs `write: true` | ⚠️ experimental |
-| `grok` | Grok CLI | `grok --prompt-file` | ✅ plan mode | ⚠️ experimental (headless hung in our test) |
-| `claude-cloud` | Claude Code on the web | official `claude --cloud`, in a terminal window it opens | cloud sandbox | ⚠️ unverified end to end (the terminal hand-off is tested) |
-| `codex-cloud` | Codex Cloud | `codex cloud exec` | cloud sandbox | ⚠️ unverified (needs a cloud environment per repo) |
-| `devin-cloud` | Devin Cloud | `devin --cloud -p`, or the Devin v3 API if `DEVIN_API_KEY` + `DEVIN_ORG_ID` are set | cloud sandbox | ⚠️ unverified |
+| `claude` | Claude Code | `claude -p --output-format json` | plan mode | tested, CLI 2.1.280 |
+| `codex` | Codex CLI | `codex exec --json -s read-only` | sandbox | tested, CLI 0.166.0 (usage-limit errors reported as such) |
+| `devin` | Devin CLI | `devin -p --prompt-file` | `auto` permissions | tested, CLI 3000.4.25 |
+| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ask mode | tested, CLI 2026.11.13 |
+| `omp` | OMP | `omp -p --mode json` | none: needs `write: true` | tested |
+| `opencode` | OpenCode | `opencode run --format json` | none: needs `write: true` | preview |
+| `hermes` | Hermes Agent | `hermes -z` | none: needs `write: true` | preview |
+| `grok` | Grok CLI | `grok --prompt-file` | plan mode | preview (did not answer headless in our check) |
 
-*Tested* means a real call went through connect-anything and came back right, on Windows, in November 2026. Agents marked "needs `write: true`" have no real read-only mode, so connect-anything won't pretend they do.
+*Tested* means a real call went through connect-anything and came back right, on Windows 11, in November 2026. CI runs the test suite on Windows, macOS and Linux, but real agent calls were only made on Windows: reports from macOS and Linux are very welcome ([open one here](https://github.com/OnlyTerp/connect-anything/issues/new?template=agent-report.yml)).
 
-**How read-only was checked.** Each agent was asked to create a file, once with its file tool and once with a shell command (`echo hi > probe2.txt`), in read-only mode, and once with `write: true` as a control:
+Long prompts are never cut. Agents that take the prompt as an argument get it as a file when it's long (OpenCode, OMP), or refuse with a clear message (Cursor, Hermes).
 
-| | file tool, read-only | shell command, read-only | same request with `write: true` |
+**How read-only was checked.** Each agent was asked to create a file, once with its file tool and once with a shell command, in read-only mode, and once with `write: true` as a control:
+
+| | file tool, read-only | shell command, read-only | with `write: true` |
 |---|---|---|---|
 | Claude Code (plan mode) | blocked | blocked | file created |
 | Devin (`auto`) | blocked | blocked | file created |
-| Cursor (ask mode) | refused | refused | file created (`--force`; see below) |
+| Cursor (ask mode) | refused | refused | file created |
 
-On our test machine a hook in Cursor's own settings broke its edit tool. In write mode (`--force`) Cursor fell back to a shell command and wrote the file; without `--force` it couldn't write at all. **Called agents run with your own hooks, rules and settings for that CLI**, so they behave as they would if you ran them yourself.
-
-An agent that finishes with an empty answer is reported as failed, with what it printed.
+Called agents run with your own hooks, rules and settings for that CLI, so they behave as they would if you ran them yourself.
 
 ### Any other agent
 
@@ -96,22 +119,46 @@ Anything with a command line can be added in `~/.connect-anything/settings.json`
 }
 ```
 
-- `{prompt}` is replaced by the prompt, and `{promptFile}` by a file containing it. Use `"stdin": true` to pipe the prompt in instead.
-- Set `"readOnly": "enforced"` only if those args really make the agent read-only. Otherwise callers must pass `write: true`.
+`{prompt}` is replaced by the prompt and `{promptFile}` by a file holding it; `"stdin": true` pipes it in instead. Set `"readOnly": "enforced"` only if those args really make the agent read-only. Otherwise callers must pass `write: true`.
 
-## Cloud agents
+## Safety
 
-Cloud agents run on the provider's machines, billed to your plan, and **see only what's pushed to GitHub**.
+Each line below is covered by a test in `test/basic.test.mjs` or was checked by hand as described.
 
-- **Claude Code cloud.** `claude --cloud` only starts from a real terminal, so connect-anything opens one for you that runs the official command. The agent is asked to push a `cloud/<job-id>` branch with a `CLOUD_REPORT.md`, and `job` reports done when that branch appears. Watch it live at claude.ai/code. Requires a Pro/Max/Team plan and GitHub connected at claude.ai/code.
-- **Codex Cloud.** Needs a Codex Cloud environment for the repo (chatgpt.com/codex → environments). The result is a diff; apply it with `codex cloud apply <id>`.
-- **Devin Cloud.** Uses `devin --cloud -p` from a recent Devin CLI (`devin update`), or Devin's official v3 API with a service-user key (`DEVIN_API_KEY`, `DEVIN_ORG_ID`).
+- **Read-only by default.** `write: true` is per call. Agents without a real read-only mode refuse without it. *(tested)*
+- **One hop only.** An agent called through connect-anything can't call further agents. *(tested: the server refuses at depth 1)* Per CLI, by hand, with a recorder in each CLI's MCP config:
+  - Claude Code: called runs start with no MCP servers (`--strict-mcp-config`).
+  - Codex: called runs switch the server off (`-c mcp_servers.connect-anything.enabled=false`); it was never started.
+  - Cursor: called runs don't pass `--approve-mcps`; the server was never started.
+  - Devin: the server starts at depth 1, so `ask` is refused.
+  - OpenCode, OMP, Hermes: not checked. The 6-job limit is the backstop. *(tested)*
+- **Replies are framed as untrusted.** Every answer arrives as `<<reply agent=X id=N untrusted>> ... <<end N>>` with a random id, and fake markers inside an answer are defused, so one agent's reply can't pose as another's. *(tested)*
+- **No shell.** Agents are started with an argument list, never through a shell, so a prompt can't inject commands. *(tested: a prompt with `$&` arrives verbatim)*
+- **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin, and needs a token for every call; the setup page holds no token. *(token checks tested)*
+- **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.
 
-Starting a cloud task is never retried automatically: a start is billed and can't be undone.
+See [SECURITY.md](SECURITY.md) to report a problem.
 
-## Cloud assistants (ChatGPT, claude.ai, phone apps)
+## How it uses your subscriptions
 
-Assistants that live in a browser or app can use the same tools over HTTP:
+connect-anything runs the CLIs you installed, the same way you would from a terminal, and each CLI bills its own plan. Your prompt and any diff you attach go to that agent's vendor under that vendor's terms. connect-anything makes no claim about what any vendor permits; check your plan's terms if you plan heavy automated use.
+
+## How is this different?
+
+- **[PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)** and similar "second model" servers call model APIs with API keys. connect-anything calls the agent CLIs you already use, with their tools, on your existing plans.
+- **Counselors, CAO, MCO** and other orchestrators run their own agent loops or teams. connect-anything adds nothing to the loop: the agent you're in stays in charge and simply gains a few tools.
+- It is deliberately small: zero dependencies, one file per concern, read-only by default.
+
+<details>
+<summary>Preview: cloud agents and cloud assistants (not verified end to end)</summary>
+
+**Cloud agents** run on the vendor's machines, billed to your plan, and see only what's pushed to GitHub. A cloud start is never retried automatically.
+
+- `claude-cloud`: `claude --cloud` only starts from a real terminal, so connect-anything opens one that runs the official command. The agent is asked to push a `cloud/<job-id>` branch with a `CLOUD_REPORT.md`; `job` reports done when that branch appears.
+- `codex-cloud`: `codex cloud exec`. Needs a Codex Cloud environment for the repo. The result is a diff for `codex cloud apply <id>`.
+- `devin-cloud`: Devin's v3 API with a service-user key (`DEVIN_API_KEY`, `DEVIN_ORG_ID`).
+
+**Cloud assistants** (browser and phone apps that accept an MCP connector URL) can use the same tools over HTTP:
 
 ```bash
 connect-anything serve --port 7777
@@ -119,57 +166,37 @@ cloudflared tunnel --url http://127.0.0.1:7777          # or any tunnel you trus
 connect-anything serve --public-host your-name.trycloudflare.com
 ```
 
-Then add an MCP connector with the URL `https://<host>/mcp/<token>`. The token is in `~/.connect-anything/token`, and `Authorization: Bearer <token>` works too.
-
-Over HTTP, callers only see and cancel jobs started over HTTP. Agents are **read-only** unless you start with `--allow-write`, may only work in the folders listed in `settings.httpRoots` (default: the folder `serve` started in), and **can't start cloud agents** (which spend your plan) unless you start with `--allow-cloud`.
-
-> This HTTP route is tested with `curl` and the setup page on this machine, not yet with a real ChatGPT or claude.ai connector through a tunnel. Treat it as a preview.
-
-## Safety
-
-- **Read-only by default.** Write access is a per-call opt-in (`write: true` / `--write`), and agents without a real read-only mode refuse to run without it.
-- **No loops.** An agent you call through connect-anything can't call further agents. Each guard below was checked by pointing the CLI's MCP config at a recorder that logs every start of the connect-anything server:
-  - **Claude Code:** called runs start with no MCP servers (`--strict-mcp-config`). As an outer harness it passes `CONNECT_ANYTHING_DEPTH` to its MCP servers, and the server refuses at depth 1.
-  - **Codex:** it passes only an allowlist of env vars to MCP servers (the recorder saw no depth), so called runs switch the connect-anything server off with `-c mcp_servers.connect-anything.enabled=false`. With it, the server is never started.
-  - **Cursor:** called runs don't pass `--approve-mcps`. The server was never started, in either mode.
-  - **Devin:** the server starts with depth 1, so `ask` is refused. Devin also rejected the MCP tool call outright in both modes we use.
-  - **OpenCode, OMP, Hermes:** not checked. The 6-job limit (`CONNECT_ANYTHING_MAX_RUNNING`) is the backstop.
-- **No shell.** Agents are spawned with argv, never through a shell, so prompts can't inject commands.
-- **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin (blocking DNS rebinding and cross-site requests), and needs a token for every call. The setup page itself contains no token.
-- **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.
-- **Replies are data.** The skill and the tool descriptions tell agents to treat other agents' replies and inbox messages as information, not as the user's instructions.
+The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. This route is tested with `curl` and the setup page, not yet through a real tunnel and connector.
+</details>
 
 ## Where things live
 
 | Path | What |
 |---|---|
 | `~/.connect-anything/jobs/<id>/` | One folder per job: `job.json`, `output.txt`, `prompt.txt` |
-| `~/.connect-anything/inbox/` | Messages between agents |
+| `~/.connect-anything/groups/` | Council records |
+| `~/.connect-anything/doctor.json` | The last `doctor` results |
 | `~/.connect-anything/settings.json` | Disabled agents, custom agents, `httpRoots` |
-| `~/.connect-anything/token` | HTTP token |
+| `~/.connect-anything/inbox/` | Notes between agents |
 
-Set `CONNECT_ANYTHING_HOME` to move all of it.
-
-Jobs run in their own background process, so an MCP client timing out or a harness closing doesn't kill the agent it called. Local jobs stop after 30 minutes (`CONNECT_ANYTHING_TIMEOUT_MIN`).
+Set `CONNECT_ANYTHING_HOME` to move all of it. Jobs run in their own background process, so a client timing out doesn't kill the agent it called. Local jobs stop after 30 minutes (`CONNECT_ANYTHING_TIMEOUT_MIN`).
 
 ## Development
 
 ```bash
-npm test        # 10 behavior tests against a fake agent, no model calls
+npm test        # behavior tests against fake agents, no model calls
 ```
-
-The code is small on purpose:
 
 | File | What it holds |
 |---|---|
 | `src/agents/local.mjs` | One entry per CLI: flags, read-only mode, parser |
-| `src/agents/cloud.mjs` | Cloud agents |
-| `src/core.mjs` | `ask`, `job`, the guards |
+| `src/agents/cloud.mjs` | Cloud agents (preview) |
+| `src/core.mjs` | `ask`, councils, diffs, `doctor`, the guards |
 | `src/mcp.mjs` | The MCP server, no SDK |
 | `src/http.mjs` | The setup page and MCP over HTTP |
-| `src/install.mjs` | Harness registration |
+| `src/install.mjs` | App registration |
 
-Adding a CLI means one entry in `local.mjs`. Take its flags from `--help` and its parser from one real reply.
+Adding a CLI is one entry in `local.mjs`: take its flags from `--help` and its parser from one real reply.
 
 ## License
 
