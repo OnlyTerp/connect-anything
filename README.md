@@ -109,7 +109,7 @@ Long prompts are never cut. Agents that take the prompt as an argument get it as
 | Cursor (ask mode) | refused | refused | file created |
 | Antigravity (plan + `request-review`) | refused | refused | file created |
 
-Antigravity's plan mode alone is not a gate: on a machine whose Antigravity tool permission was "always proceed", plan-mode runs created files both ways. So read-only runs also set that session's tool permission to `request-review` (never saved): edits and commands then need an approval a headless run can't give, and the run stops with a clear error. Commands you have always-allowed in Antigravity's own settings still follow your rules.
+Antigravity's plan mode alone is not a gate: on a machine whose Antigravity tool permission was "always proceed", plan-mode runs created files both ways. So read-only runs also set that session's tool permission to `request-review` (never saved): edits and commands then need an approval a headless run can't give, and the run stops with a clear error. Reading files still works (checked: it read a file and answered). Commands you have always-allowed in Antigravity's own settings are your rules; we tried twice to make a read-only run write through one with an output redirect, and both times it only wrote a plan, so that case is unproven either way.
 
 Called agents run with your own hooks, rules and settings for that CLI, so they behave as they would if you ran them yourself.
 

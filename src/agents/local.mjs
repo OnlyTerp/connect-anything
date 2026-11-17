@@ -253,6 +253,9 @@ export const LOCAL_AGENTS = [
     // approval a headless run can't give, and are refused. Reads in the folder are still allowed.
     readOnly: "enforced",
     refusesCommandsReadOnly: true,
+    // One refused tool ends a headless agy turn, and that includes MCP tools.
+    readOnlyNote:
+      "[Read-only run: you can read files, but running commands or tests, editing files and calling MCP tools will be refused, and a refused tool ends your turn. Answer from reading the code with your file-reading tools; do not try to run anything.]\n\n",
     install: "Install Antigravity; its command-line tool is `agy`.",
     signIn: "Open Antigravity (or run `agy`) once and sign in.",
     locate: () => locate("antigravity", "agy", [isWin ? path.join(LOCAL, "agy/bin/agy.exe") : null]),

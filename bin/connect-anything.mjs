@@ -75,7 +75,7 @@ async function main() {
       const t0 = Date.now();
       const res = await core.doctor({
         only,
-        onResult: (a, r) => console.log(`  ${(r.ok ? "ok" : r.skipped ? "--" : "x ").padEnd(3)}${a.id.padEnd(10)}${r.ok ? `answered in ${(r.ms / 1000).toFixed(1)} s` : r.error}`),
+        onResult: (a, r) => console.log(`  ${(r.ok ? "ok" : r.skipped ? "--" : "x ").padEnd(3)}${a.id.padEnd(13)}${r.ok ? `answered in ${(r.ms / 1000).toFixed(1)} s` : r.error}`),
       });
       const ok = Object.entries(res).filter(([, r]) => r.ok).map(([id]) => id);
       console.log(`\n${ok.length} agent${ok.length === 1 ? "" : "s"} answered (${((Date.now() - t0) / 1000).toFixed(1)} s total).`);
