@@ -79,7 +79,7 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, allow
         for (const m of msgs) {
           let r;
           try {
-            r = await handle(restrict(m, guard), { caller: "http" });
+            r = await handle(restrict(m, guard), { caller: "http", onlyCaller: "http" });
           } catch (e) {
             r = { jsonrpc: "2.0", id: m?.id ?? null, result: { content: [{ type: "text", text: String(e?.message || e) }], isError: true } };
           }

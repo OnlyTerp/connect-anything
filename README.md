@@ -55,7 +55,7 @@ The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when t
 | `claude` | Claude Code | `claude -p --output-format json` | ✅ plan mode | ✅ tested |
 | `codex` | Codex CLI | `codex exec --json -s read-only` | ✅ sandbox | ✅ tested (incl. usage-limit errors) |
 | `devin` | Devin CLI | `devin -p --prompt-file` | ✅ `auto` permissions | ✅ tested (`--model swe-2` is Devin's own fast model) |
-| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested read-only (write mode not yet seen writing) |
+| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested |
 | `omp` | OMP | `omp -p --mode json` | ❌ needs `write: true` | ✅ tested |
 | `opencode` | OpenCode | `opencode run --format json` | ❌ needs `write: true` | ⚠️ parser not yet seen succeed |
 | `hermes` | Hermes Agent | `hermes -z` | ❌ needs `write: true` | ⚠️ experimental |
@@ -72,7 +72,9 @@ The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when t
 |---|---|---|---|
 | Claude Code (plan mode) | blocked | blocked | file created |
 | Devin (`auto`) | blocked | blocked | file created |
-| Cursor (ask mode) | refused | refused | **not created** on our machine, so Cursor's refusal may be the model, not the mode |
+| Cursor (ask mode) | refused | refused | file created (`--force`; see below) |
+
+On our test machine a hook in Cursor's own settings broke its edit tool. In write mode (`--force`) Cursor fell back to a shell command and wrote the file; without `--force` it couldn't write at all. **Called agents run with your own hooks, rules and settings for that CLI**, so they behave as they would if you ran them yourself.
 
 An agent that finishes with an empty answer is reported as failed, with what it printed.
 
@@ -119,20 +121,19 @@ connect-anything serve --public-host your-name.trycloudflare.com
 
 Then add an MCP connector with the URL `https://<host>/mcp/<token>`. The token is in `~/.connect-anything/token`, and `Authorization: Bearer <token>` works too.
 
-Over HTTP, agents are **read-only** unless you start with `--allow-write`, may only work in the folders listed in `settings.httpRoots` (default: the folder `serve` started in), and **can't start cloud agents** (which spend your plan) unless you start with `--allow-cloud`.
+Over HTTP, callers only see and cancel jobs started over HTTP. Agents are **read-only** unless you start with `--allow-write`, may only work in the folders listed in `settings.httpRoots` (default: the folder `serve` started in), and **can't start cloud agents** (which spend your plan) unless you start with `--allow-cloud`.
 
 > This HTTP route is tested with `curl` and the setup page on this machine, not yet with a real ChatGPT or claude.ai connector through a tunnel. Treat it as a preview.
 
 ## Safety
 
 - **Read-only by default.** Write access is a per-call opt-in (`write: true` / `--write`), and agents without a real read-only mode refuse to run without it.
-- **No loops.** An agent you call through connect-anything can't call further agents. Several layers do this, and which one applies depends on the agent:
-  - Called Claude Code runs start with no MCP servers (`--strict-mcp-config`).
-  - Called Codex runs switch the connect-anything server off (`-c mcp_servers.connect-anything.enabled=false`), because Codex doesn't pass our environment to its MCP servers.
-  - Called Cursor runs don't approve MCP servers (no `--approve-mcps`).
-  - Called Devin runs reject MCP tool calls in both modes we use (seen in testing).
-  - Every called agent also gets `CONNECT_ANYTHING_DEPTH=1`, and the server refuses `ask` at that depth (`CONNECT_ANYTHING_MAX_DEPTH`, default 1). We confirmed that Claude Code passes it through to its MCP servers. For OpenCode, OMP and Hermes this env guard is unverified.
-  - As a backstop, at most 6 jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`).
+- **No loops.** An agent you call through connect-anything can't call further agents. Each guard below was checked by pointing the CLI's MCP config at a recorder that logs every start of the connect-anything server:
+  - **Claude Code:** called runs start with no MCP servers (`--strict-mcp-config`). As an outer harness it passes `CONNECT_ANYTHING_DEPTH` to its MCP servers, and the server refuses at depth 1.
+  - **Codex:** it passes only an allowlist of env vars to MCP servers (the recorder saw no depth), so called runs switch the connect-anything server off with `-c mcp_servers.connect-anything.enabled=false`. With it, the server is never started.
+  - **Cursor:** called runs don't pass `--approve-mcps`. The server was never started, in either mode.
+  - **Devin:** the server starts with depth 1, so `ask` is refused. Devin also rejected the MCP tool call outright in both modes we use.
+  - **OpenCode, OMP, Hermes:** not checked. The 6-job limit (`CONNECT_ANYTHING_MAX_RUNNING`) is the backstop.
 - **No shell.** Agents are spawned with argv, never through a shell, so prompts can't inject commands.
 - **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin (blocking DNS rebinding and cross-site requests), and needs a token for every call. The setup page itself contains no token.
 - **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.

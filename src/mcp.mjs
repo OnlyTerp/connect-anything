@@ -3,6 +3,7 @@
 
 import readline from "node:readline";
 import * as core from "./core.mjs";
+import { readJob } from "./jobs.mjs";
 import { VERSION } from "./version.mjs";
 
 const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -97,6 +98,8 @@ export const TOOLS = [
 const text = (s) => ({ content: [{ type: "text", text: typeof s === "string" ? s : JSON.stringify(s, null, 2) }] });
 
 async function callTool(name, args = {}, ctx = {}) {
+  // Over HTTP, callers only see and stop the jobs they started over HTTP.
+  const mine = (job) => job && (!ctx.onlyCaller || job.caller === ctx.onlyCaller);
   switch (name) {
     case "agents":
       return text(core.describeAgents(await core.listAgents()));
@@ -105,13 +108,14 @@ async function callTool(name, args = {}, ctx = {}) {
       return text(core.describeJob(res));
     }
     case "job": {
-      const job = await core.getJob(args.id, args.wait_s ?? 0);
+      const job = mine(readJob(args.id)) ? await core.getJob(args.id, args.wait_s ?? 0) : null;
       if (!job) return { ...text(`No job ${args.id}.`), isError: true };
       return text(core.describeJob(job));
     }
     case "jobs":
-      return text(core.describeJobs(core.recentJobs(args.limit ?? 15)));
+      return text(core.describeJobs(core.recentJobs(ctx.onlyCaller ? 200 : args.limit ?? 15).filter(mine).slice(0, args.limit ?? 15)));
     case "cancel":
+      if (!mine(readJob(args.id))) return { ...text(`No job ${args.id}.`), isError: true };
       return text(await core.cancel(args.id));
     case "send":
       return text(core.send(args));

@@ -165,7 +165,7 @@ test("jobs record the harness that connected over stdio", async () => {
   assert.equal(job.caller, "test-harness");
 });
 
-test("over HTTP, cloud agents are refused without --allow-cloud (however the id is spelled)", async () => {
+test("over HTTP: no token in the page, cloud agents refused however spelled, local jobs invisible", async () => {
   const port = 20000 + Math.floor(Math.random() * 20000);
   const p = spawn(process.execPath, [BIN, "serve", "--port", String(port)], { env: process.env, stdio: ["ignore", "pipe", "inherit"] });
   try {
@@ -181,6 +181,13 @@ test("over HTTP, cloud agents are refused without --allow-cloud (however the id 
     }
     const api = await fetch(`http://127.0.0.1:${port}/api/ask`, { method: "POST", headers: { "content-type": "application/json", "x-ca-token": tok }, body: JSON.stringify({ agent: "devin-cloud ", prompt: "hi" }) });
     assert.equal(api.status, 400);
+    // A job started locally (stdio) is invisible to HTTP callers.
+    const [local] = await mcp([call(1, "ask", { agent: "fake", prompt: "local secret" })]);
+    const localId = textOf(local).match(/Job (\S+)/)[1];
+    const rpc = async (name, args) => (await (await fetch(`http://127.0.0.1:${port}/mcp/${tok}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call(1, name, args)) })).json()).result;
+    assert.match((await rpc("job", { id: localId })).content[0].text, /No job/);
+    assert.match((await rpc("cancel", { id: localId })).content[0].text, /No job/);
+    assert.doesNotMatch((await rpc("jobs", {})).content[0].text, new RegExp(localId));
   } finally {
     p.kill();
   }
