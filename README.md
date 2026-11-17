@@ -89,6 +89,8 @@ The bundled skill (`skills/connect-anything/SKILL.md`) teaches agents when to us
 
 *Tested* means a real call went through connect-anything and came back right, on Windows 11, in November 2026. CI runs the test suite on Windows, macOS and Linux, but real agent calls were only made on Windows: reports from macOS and Linux are very welcome ([open one here](https://github.com/OnlyTerp/connect-anything/issues/new?template=agent-report.yml)).
 
+**As the caller**, Claude Code was checked end to end: given the server with `--mcp-config`, it asked a Devin + Cursor council about a staged diff and summarised where they agreed and disagreed. Other apps are registered by `install` the same way but haven't been checked as callers yet.
+
 Long prompts are never cut. Agents that take the prompt as an argument get it as a file when it's long (OpenCode, OMP), or refuse with a clear message (Cursor, Hermes).
 
 **How read-only was checked.** Each agent was asked to create a file, once with its file tool and once with a shell command, in read-only mode, and once with `write: true` as a control:
