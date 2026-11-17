@@ -82,13 +82,13 @@ function shimTarget(shim) {
  * Run a command to completion. Never throws for a non-zero exit; returns
  * { code, stdout, stderr, timedOut }.
  */
-export function run(command, args, { input, cwd, env, timeoutMs = 10 * 60_000, onStdout } = {}) {
+export function run(command, args, { input, cwd, env, replaceEnv = false, timeoutMs = 10 * 60_000, onStdout } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
       child = spawn(command, args, {
         cwd,
-        env: { ...process.env, ...env, PYTHONIOENCODING: "utf-8" },
+        env: { ...(replaceEnv ? {} : process.env), ...env, PYTHONIOENCODING: "utf-8" },
         shell: false,
         windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"],

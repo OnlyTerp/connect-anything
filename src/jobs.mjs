@@ -35,17 +35,34 @@ function dir(id) {
 
 export function readJob(id) {
   const f = path.join(dir(id), "job.json");
-  if (!existsSync(f)) return null;
-  return JSON.parse(readFileSync(f, "utf8"));
+  for (let i = 0; ; i++) {
+    if (!existsSync(f)) return null;
+    try {
+      return JSON.parse(readFileSync(f, "utf8"));
+    } catch (e) {
+      // Caught mid-swap by another process on Windows: try again shortly.
+      if (i >= 20) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
 }
 
 export function writeJob(job) {
   const d = dir(job.id);
   mkdirSync(d, { recursive: true });
   job.updatedAt = new Date().toISOString();
-  const tmp = path.join(d, "job.json.tmp");
+  const tmp = path.join(d, `job.json.${process.pid}.${randomBytes(3).toString("hex")}.tmp`);
   writeFileSync(tmp, JSON.stringify(job, null, 2));
-  renameSync(tmp, path.join(d, "job.json"));
+  // Windows refuses a rename onto a file another process has open for a moment; retry briefly.
+  for (let i = 0; ; i++) {
+    try {
+      renameSync(tmp, path.join(d, "job.json"));
+      break;
+    } catch (e) {
+      if (i >= 20) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
   return job;
 }
 
