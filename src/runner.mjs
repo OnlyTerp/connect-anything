@@ -9,6 +9,11 @@ import { run } from "./spawn.mjs";
 
 const PREAMBLE =
   "[You were called by another AI agent through connect-anything. You have none of its context beyond this message. Do the task and put your complete answer in your final message.]\n\n";
+const READ_ONLY_NOTE =
+  "[Read-only run: you can read files, but running commands or tests and editing files will be refused. Answer from reading the code; do not stop to run anything.]\n\n";
+
+/** Signs on stderr that the CLI refused a tool call because the run is read-only. */
+const REFUSED_TOOL = /rejected a tool call|requires (confirmation|approval)|permission (denied|required)|not allowed in (plan|ask|read-only) mode/i;
 
 /** Local jobs end after this long unless CONNECT_ANYTHING_TIMEOUT_MIN says otherwise. */
 const TIMEOUT_MIN = Number(process.env.CONNECT_ANYTHING_TIMEOUT_MIN || 30);
@@ -34,7 +39,7 @@ export async function runJob(id) {
 
 async function runLocal(job, agent) {
   const promptFile = path.join(jobsDir(), job.id, "prompt.txt");
-  const prompt = PREAMBLE + job.prompt;
+  const prompt = PREAMBLE + (job.write ? "" : READ_ONLY_NOTE) + job.prompt;
   writeFileSync(promptFile, prompt);
   const c = agent.command?.() ?? getAgent(agent.id.replace(/-cloud$/, ""))?.command();
   if (!c) throw new Error(`${agent.name} is not installed.`);
@@ -62,7 +67,14 @@ async function runLocal(job, agent) {
     const why = lastLine(r.stderr);
     patchJob(job.id, { status: "failed", error: `${agent.name} finished without an answer.${why ? ` It said: ${why}` : ""}`, pid: null, endedAt: ended });
   } else {
-    patchJob(job.id, { status: "done", result: parsed.text, meta: parsed.meta || null, pid: null, endedAt: ended });
+    let result = parsed.text;
+    // A CLI that refuses a tool in read-only mode can end the turn on a sentence like "I'll run the
+    // tests first". Say so rather than pass that off as the answer.
+    if (!job.write && REFUSED_TOOL.test(r.stderr || "") && String(result).trim().length < 400) {
+      result +=
+        "\n\n[connect-anything: this agent tried a tool that read-only mode blocks and may have stopped early. Ask again and tell it to answer from reading only, or pass write: true if the user allows changes.]";
+    }
+    patchJob(job.id, { status: "done", result, meta: parsed.meta || null, pid: null, endedAt: ended });
   }
 }
 
