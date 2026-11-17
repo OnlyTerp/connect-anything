@@ -182,7 +182,9 @@ cloudflared tunnel --url http://127.0.0.1:7777          # or any tunnel you trus
 connect-anything serve --public-host your-name.trycloudflare.com
 ```
 
-The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. Checked with a real MCP client over HTTP on this machine: Claude Code, given the URL and token, called `ask` and Devin's review came back. Not yet checked through a public tunnel, or from any named assistant app (ChatGPT, Claude, Grok and others each need their custom-connector setting turned on, which is up to you).
+The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. Checked through a public Cloudflare quick tunnel with a real MCP client (Claude Code given the https URL and token): `ask` came back with Devin's review, a `write: true` call and a folder outside the allowed one were both refused, and from the public host the setup page and its API answer 404 and a wrong token 401. Not yet checked from a named assistant app (ChatGPT, Claude, Grok and others each need their custom-connector setting turned on, which is up to you).
+
+If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404; give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
 </details>
 
 ## Where things live
