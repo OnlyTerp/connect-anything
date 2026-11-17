@@ -20,7 +20,7 @@ cd connect-anything
 node bin/connect-anything.mjs setup
 ```
 
-The setup page opens at `http://127.0.0.1:7777` (the link it opens carries a one-time key in the `#` part, which never leaves your browser):
+The setup page opens at `http://127.0.0.1:7777` (the link it opens carries your connect-anything token in the `#` part, which never leaves your browser):
 
 1. **Your agents.** See what's installed and signed in, and switch off any you don't want others to call.
 2. **Connect your harnesses.** One click adds connect-anything (tools + skill) to each app it found. Restart those apps.
@@ -55,7 +55,7 @@ The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when t
 | `claude` | Claude Code | `claude -p --output-format json` | ✅ plan mode | ✅ tested |
 | `codex` | Codex CLI | `codex exec --json -s read-only` | ✅ sandbox | ✅ tested (incl. usage-limit errors) |
 | `devin` | Devin CLI | `devin -p --prompt-file` | ✅ `auto` permissions | ✅ tested (`--model swe-2` is Devin's own fast model) |
-| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested |
+| `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested read-only (write mode not yet seen writing) |
 | `omp` | OMP | `omp -p --mode json` | ❌ needs `write: true` | ✅ tested |
 | `opencode` | OpenCode | `opencode run --format json` | ❌ needs `write: true` | ⚠️ parser not yet seen succeed |
 | `hermes` | Hermes Agent | `hermes -z` | ❌ needs `write: true` | ⚠️ experimental |
@@ -66,7 +66,15 @@ The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when t
 
 *Tested* means a real call went through connect-anything and came back right, on Windows, in November 2026. Agents marked "needs `write: true`" have no real read-only mode, so connect-anything won't pretend they do.
 
-Read-only was checked by asking `claude`, `cursor` and `devin` to create a file in read-only mode: none of them did (Claude Code and Cursor refused; Devin's `auto` mode blocked the write). An agent that finishes with an empty answer is reported as failed, with what it printed.
+**How read-only was checked.** Each agent was asked to create a file, once with its file tool and once with a shell command (`echo hi > probe2.txt`), in read-only mode, and once with `write: true` as a control:
+
+| | file tool, read-only | shell command, read-only | same request with `write: true` |
+|---|---|---|---|
+| Claude Code (plan mode) | blocked | blocked | file created |
+| Devin (`auto`) | blocked | blocked | file created |
+| Cursor (ask mode) | refused | refused | **not created** on our machine, so Cursor's refusal may be the model, not the mode |
+
+An agent that finishes with an empty answer is reported as failed, with what it printed.
 
 ### Any other agent
 
@@ -118,7 +126,13 @@ Over HTTP, agents are **read-only** unless you start with `--allow-write`, may o
 ## Safety
 
 - **Read-only by default.** Write access is a per-call opt-in (`write: true` / `--write`), and agents without a real read-only mode refuse to run without it.
-- **No loops.** Agents called through connect-anything can't call further agents: an agent you call gets the tools refused (`CONNECT_ANYTHING_MAX_DEPTH`, default 1). Tested with Claude Code as the outer harness. At most 6 jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`), as a backstop. Child Claude Code runs start with no MCP servers.
+- **No loops.** An agent you call through connect-anything can't call further agents. Several layers do this, and which one applies depends on the agent:
+  - Called Claude Code runs start with no MCP servers (`--strict-mcp-config`).
+  - Called Codex runs switch the connect-anything server off (`-c mcp_servers.connect-anything.enabled=false`), because Codex doesn't pass our environment to its MCP servers.
+  - Called Cursor runs don't approve MCP servers (no `--approve-mcps`).
+  - Called Devin runs reject MCP tool calls in both modes we use (seen in testing).
+  - Every called agent also gets `CONNECT_ANYTHING_DEPTH=1`, and the server refuses `ask` at that depth (`CONNECT_ANYTHING_MAX_DEPTH`, default 1). We confirmed that Claude Code passes it through to its MCP servers. For OpenCode, OMP and Hermes this env guard is unverified.
+  - As a backstop, at most 6 jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`).
 - **No shell.** Agents are spawned with argv, never through a shell, so prompts can't inject commands.
 - **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin (blocking DNS rebinding and cross-site requests), and needs a token for every call. The setup page itself contains no token.
 - **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.

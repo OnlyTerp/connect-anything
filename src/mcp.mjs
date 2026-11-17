@@ -101,7 +101,7 @@ async function callTool(name, args = {}, ctx = {}) {
     case "agents":
       return text(core.describeAgents(await core.listAgents()));
     case "ask": {
-      const res = await core.ask({ ...args, caller: ctx.caller || clientName });
+      const res = await core.ask({ ...args, caller: ctx.caller || ctx.session?.clientName || null });
       return text(core.describeJob(res));
     }
     case "job": {
@@ -123,9 +123,6 @@ async function callTool(name, args = {}, ctx = {}) {
 }
 
 /** Handle one JSON-RPC message. Returns a response object, or null for notifications. */
-/** The harness that connected (from initialize), recorded on its jobs. */
-let clientName = null;
-
 export async function handle(msg, ctx = {}) {
   const { id, method, params } = msg || {};
   const reply = (result) => ({ jsonrpc: "2.0", id, result });
@@ -135,7 +132,8 @@ export async function handle(msg, ctx = {}) {
     switch (method) {
       case "initialize": {
         const asked = params?.protocolVersion;
-        if (typeof params?.clientInfo?.name === "string") clientName = params.clientInfo.name.slice(0, 60);
+        // stdio only: one connection, one harness. Its name is recorded on the jobs it starts.
+        if (ctx.session && typeof params?.clientInfo?.name === "string") ctx.session.clientName = params.clientInfo.name.slice(0, 60);
         return reply({
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
           capabilities: { tools: { listChanged: false } },
@@ -170,6 +168,7 @@ export async function handle(msg, ctx = {}) {
 export function serveStdio() {
   const rl = readline.createInterface({ input: process.stdin });
   const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+  const session = {};
   rl.on("line", async (line) => {
     if (!line.trim()) return;
     let msg;
@@ -181,7 +180,7 @@ export function serveStdio() {
     }
     const batch = Array.isArray(msg) ? msg : [msg];
     for (const m of batch) {
-      const r = await handle(m, { caller: process.env.CONNECT_ANYTHING_CALLER });
+      const r = await handle(m, { caller: process.env.CONNECT_ANYTHING_CALLER, session });
       if (r) out(r);
     }
   });

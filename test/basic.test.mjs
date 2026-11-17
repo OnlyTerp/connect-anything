@@ -30,6 +30,7 @@ before(() => {
       custom: [
         { id: "fake", name: "Fake", command: process.execPath, args: [fake], stdin: true, readOnly: "enforced" },
         { id: "rw", name: "Writer", command: process.execPath, args: [fake], stdin: true },
+        { id: "mute", name: "Mute", command: process.execPath, args: ["-e", "console.error('nothing to say')"], readOnly: "enforced" },
         { id: "argv", name: "Argv", command: process.execPath, args: ["-e", "console.log('arg:'+process.argv.at(-1))", "{prompt}"], readOnly: "enforced" },
       ],
     }),
@@ -149,4 +150,38 @@ test("installer edits JSON configs with a backup and removes cleanly", async () 
   assert.equal(oc.mcp["connect-anything"].type, "local");
   await install({ harnesses: ["cursor"], uninstall: true });
   assert.equal(JSON.parse(readFileSync(f, "utf8")).mcpServers["connect-anything"], undefined);
+});
+
+test("an agent that answers nothing is reported as failed, with its stderr", async () => {
+  const [r] = await mcp([call(1, "ask", { agent: "mute", prompt: "x" })]);
+  assert.match(textOf(r), /— failed/);
+  assert.match(textOf(r), /without an answer.*nothing to say/s);
+});
+
+test("jobs record the harness that connected over stdio", async () => {
+  const [, r] = await mcp([{ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", clientInfo: { name: "test-harness" } } }, call(2, "ask", { agent: "fake", prompt: "x" })]);
+  const id = textOf(r).match(/Job (\S+)/)[1];
+  const job = JSON.parse(readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "jobs", id, "job.json"), "utf8"));
+  assert.equal(job.caller, "test-harness");
+});
+
+test("over HTTP, cloud agents are refused without --allow-cloud (however the id is spelled)", async () => {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const p = spawn(process.execPath, [BIN, "serve", "--port", String(port)], { env: process.env, stdio: ["ignore", "pipe", "inherit"] });
+  try {
+    await new Promise((res) => p.stdout.on("data", (d) => String(d).includes("setup page") && res()));
+    const tok = readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "token"), "utf8").trim();
+    const page = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+    assert.ok(!page.includes(tok), "the setup page must not contain the token");
+    for (const agent of ["devin-cloud", "devin-cloud ", "DEVIN_CLOUD", "claude-cloud"]) {
+      const r = await fetch(`http://127.0.0.1:${port}/mcp/${tok}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call(1, "ask", { agent, prompt: "hi" })) });
+      const j = await r.json();
+      assert.equal(j.result.isError, true, agent);
+      assert.match(j.result.content[0].text, /--allow-cloud/, agent);
+    }
+    const api = await fetch(`http://127.0.0.1:${port}/api/ask`, { method: "POST", headers: { "content-type": "application/json", "x-ca-token": tok }, body: JSON.stringify({ agent: "devin-cloud ", prompt: "hi" }) });
+    assert.equal(api.status, 400);
+  } finally {
+    p.kill();
+  }
 });

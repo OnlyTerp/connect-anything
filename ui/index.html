@@ -66,7 +66,7 @@
 
   <section>
     <h2><span class="step">1</span>Your agents</h2>
-    <p class="sub">Found on this computer. A green dot means installed and ready. Turn off any you don't want other agents to call.</p>
+    <p class="sub">Found on this computer. Green: installed and signed in. Faded green: installed, but its sign-in can't be checked from outside (a call will say if it's signed out). Turn off any you don't want other agents to call.</p>
     <div class="grid" id="agents"><p class="note">Looking…</p></div>
   </section>
 
@@ -115,6 +115,8 @@ const TOKEN = (() => {
   if (m) { sessionStorage.setItem("ca-token", m[1]); history.replaceState(null, "", location.pathname); }
   return sessionStorage.getItem("ca-token") || "";
 })();
+// Pasting the link into a tab that already has this page open only changes the hash: start over.
+addEventListener("hashchange", () => /t=/.test(location.hash) && location.reload());
 const $ = (id) => document.getElementById(id);
 const api = async (p, opt = {}) => {
   const r = await fetch(p, { ...opt, headers: { "x-ca-token": TOKEN, "content-type": "application/json", ...(opt.headers || {}) } });

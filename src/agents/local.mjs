@@ -4,7 +4,7 @@
 // readOnly: "enforced"  -> the CLI has a real read-only/plan mode and we use it unless write: true
 //           "none"      -> the CLI has no such mode, so connect-anything refuses unless write: true
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { resolveCommand } from "../spawn.mjs";
@@ -99,7 +99,10 @@ export const LOCAL_AGENTS = [
     locate: () => locate("codex", "codex", [isWin ? path.join(LOCAL, "Programs/OpenAI/Codex/bin/codex.exe") : null]),
     signedIn: () => (process.env.OPENAI_API_KEY || existsSync(path.join(process.env.CODEX_HOME || path.join(HOME, ".codex"), "auth.json")) ? true : false),
     build: ({ model, write, cwd }) => ({
-      args: ["exec", "--json", "--skip-git-repo-check", "-s", write ? "workspace-write" : "read-only", "-C", cwd, ...(model ? ["-m", model] : []), "-"],
+      // Codex passes only an allowlist of env vars to its MCP servers, so the depth guard can't
+      // reach a connect-anything server it starts. Switch that server off for this run instead
+      // (only when it is configured: the override breaks Codex's config load otherwise).
+      args: ["exec", ...(codexHasUs() ? ["-c", "mcp_servers.connect-anything.enabled=false"] : []), "--json", "--skip-git-repo-check", "-s", write ? "workspace-write" : "read-only", "-C", cwd, ...(model ? ["-m", model] : []), "-"],
       stdin: true,
     }),
     parse: (stdout) => {
@@ -114,7 +117,7 @@ export const LOCAL_AGENTS = [
   {
     id: "devin",
     name: "Devin (local CLI)",
-    goodFor: "General coding agent; SWE-2 (--model swe-2) is Devin's own fast model, free on some plans.",
+    goodFor: "General coding agent; SWE-2 (--model swe-2) is Devin's own fast model.",
     readOnly: "enforced",
     install: "Install the Devin CLI: https://docs.devin.ai/cli",
     signIn: "Run `devin auth login`.",
@@ -137,7 +140,8 @@ export const LOCAL_AGENTS = [
     locate: () => locate("cursor", "cursor-agent", [cursorNode()].filter(Boolean)) ,
     signedIn: () => null,
     build: ({ model, write, prompt }) => ({
-      args: ["-p", ...(write ? [] : ["--mode", "ask"]), "--output-format", "json", "--trust", ...(model ? ["--model", model] : []), prompt],
+      // No --approve-mcps: a called Cursor can't use MCP servers, so it can't call back in here.
+      args: ["-p", ...(write ? ["--force"] : ["--mode", "ask"]), "--output-format", "json", "--trust", ...(model ? ["--model", model] : []), prompt],
       stdin: false,
     }),
     parse: (stdout) => {
@@ -222,6 +226,16 @@ export const LOCAL_AGENTS = [
     },
   },
 ];
+
+/** Is connect-anything one of Codex's configured MCP servers? (Reads config.toml, never auth.json.) */
+function codexHasUs() {
+  try {
+    const cfg = readFileSync(path.join(process.env.CODEX_HOME || path.join(HOME, ".codex"), "config.toml"), "utf8");
+    return /^\s*\[mcp_servers\.["']?connect-anything["']?\]/m.test(cfg);
+  } catch {
+    return false;
+  }
+}
 
 /** Cursor's Windows launcher is a .ps1 that runs the newest versions/<date>/node.exe index.js. */
 function cursorNode() {

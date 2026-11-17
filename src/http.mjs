@@ -18,6 +18,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as core from "./core.mjs";
 import { handle } from "./mcp.mjs";
+import { getAgent } from "./agents/index.mjs";
 import { home, readSettings, writeSettings } from "./home.mjs";
 import { HARNESSES, install, manualConfig } from "./install.mjs";
 import { VERSION } from "./version.mjs";
@@ -130,6 +131,8 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, allow
         }
         if (req.method === "POST" && url.pathname === "/api/ask") {
           const b = await body(req);
+          // The page only tries local agents; it never starts paid cloud work.
+          if (getAgent(b.agent)?.kind !== "local") return send(400, { error: "The setup page can only try local agents." });
           const job = await core.ask({ agent: b.agent, prompt: String(b.prompt || ""), cwd: startDir, wait_s: 0, write: false, caller: "setup-page" });
           return send(200, { job });
         }
@@ -167,7 +170,7 @@ function roots(startDir) {
 function restrict(m, { allowWrite, allowCloud, roots: rs }) {
   if (m?.method !== "tools/call" || m.params?.name !== "ask") return m;
   const a = { ...(m.params.arguments || {}) };
-  if (/[-_]cloud$/i.test(String(a.agent || "")) && !allowCloud) {
+  if (getAgent(a.agent)?.kind === "cloud" && !allowCloud) {
     throw new Error("Over HTTP, cloud agents are off (they spend your plan and push branches). Restart `connect-anything serve` with --allow-cloud to allow them.");
   }
   if (a.write && !allowWrite) throw new Error("Over HTTP, agents are read-only. Restart connect-anything serve with --allow-write to allow changes.");
