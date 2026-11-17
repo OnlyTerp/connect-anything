@@ -10,7 +10,10 @@ import { run } from "./spawn.mjs";
 const PREAMBLE =
   "[You were called by another AI agent through connect-anything. You have none of its context beyond this message. Do the task and put your complete answer in your final message.]\n\n";
 const READ_ONLY_NOTE =
-  "[Read-only run: you can read files, but running commands or tests and editing files will be refused. Answer from reading the code; do not stop to run anything.]\n\n";
+  "[Read-only run: you can read files but not edit them, and commands or tests may be refused. If a tool is refused, answer from reading the code instead of stopping.]\n\n";
+/** For CLIs whose read-only mode refuses every shell command (a refused call can end their turn). */
+const NO_COMMANDS_NOTE =
+  "[Read-only run: you can read files, but running commands or tests and editing files will be refused. Answer from reading the code; do not try to run anything.]\n\n";
 
 /** Signs on stderr that the CLI refused a tool call because the run is read-only. */
 const REFUSED_TOOL = /rejected a tool call|requires (confirmation|approval)|permission (denied|required)|not allowed in (plan|ask|read-only) mode/i;
@@ -39,7 +42,8 @@ export async function runJob(id) {
 
 async function runLocal(job, agent) {
   const promptFile = path.join(jobsDir(), job.id, "prompt.txt");
-  const prompt = PREAMBLE + (job.write ? "" : READ_ONLY_NOTE) + job.prompt;
+  const note = job.write ? "" : agent.refusesCommandsReadOnly ? NO_COMMANDS_NOTE : READ_ONLY_NOTE;
+  const prompt = PREAMBLE + note + job.prompt;
   writeFileSync(promptFile, prompt);
   const c = agent.command?.() ?? getAgent(agent.id.replace(/-cloud$/, ""))?.command();
   if (!c) throw new Error(`${agent.name} is not installed.`);

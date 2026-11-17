@@ -120,9 +120,13 @@ test("a cwd that is not a folder is refused", async () => {
   assert.match(textOf(r), /not a folder/);
 });
 
-test("custom agents get the prompt verbatim, even with $& in it", async () => {
+test("custom agents get the prompt verbatim, even with $& or shell syntax in it", async () => {
   const [r] = await mcp([call(1, "ask", { agent: "argv", prompt: "a$&b$'c" })]);
   assert.match(textOf(r), /arg:\[You were called[^]*\n\na\$&b\$'c\n<<end /);
+  const evil = 'x"; echo PWNED & echo PWNED | $(echo PWNED) `echo PWNED` %PATH%';
+  const [s] = await mcp([call(2, "ask", { agent: "argv", prompt: evil })]);
+  assert.ok(textOf(s).includes(evil + "\n<<end "), textOf(s));
+  assert.equal((textOf(s).match(/PWNED/g) || []).length, 4, "shell syntax must not run");
 });
 
 test("inbox: send, read once, then empty", async () => {

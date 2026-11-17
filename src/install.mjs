@@ -21,10 +21,11 @@ const PKG_ROOT = fileURLToPath(new URL("..", import.meta.url));
  * may prune; so it is copied once to <home>/app/<version>/ and that copy is registered. No network
  * at app start, no silent updates: run `install` again after upgrading.
  */
+let previewOnly = false;
 function stableBin() {
   if (!/[\\/]_npx[\\/]/.test(PKG_ROOT)) return BIN;
   const dest = path.join(caHome(), "app", VERSION);
-  if (!existsSync(path.join(dest, "bin", "connect-anything.mjs"))) {
+  if (!previewOnly && !existsSync(path.join(dest, "bin", "connect-anything.mjs"))) {
     for (const d of ["bin", "src", "ui", "skills", "package.json", "LICENSE"]) {
       if (existsSync(path.join(PKG_ROOT, d))) cpSync(path.join(PKG_ROOT, d), path.join(dest, d), { recursive: true });
     }
@@ -156,6 +157,7 @@ function installSkill(dir, { dryRun, uninstall }) {
 
 /** Install into the named harnesses, or every detected one. */
 export async function install({ harnesses = [], dryRun = false, uninstall = false } = {}) {
+  previewOnly = dryRun;
   const ids = harnesses.length ? harnesses : Object.keys(HARNESSES).filter((h) => HARNESSES[h].detect());
   const out = [];
   const skillDirs = new Set();

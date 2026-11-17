@@ -58,6 +58,8 @@ const textOf = (content) =>
 export const LOCAL_AGENTS = [
   {
     id: "claude",
+    // Its read-only mode refuses shell commands, so the prompt says so up front.
+    refusesCommandsReadOnly: true,
     name: "Claude Code",
     goodFor: "Careful coding, reviews, refactors, long reasoning.",
     readOnly: "enforced",
@@ -121,6 +123,8 @@ export const LOCAL_AGENTS = [
   },
   {
     id: "devin",
+    // Its read-only mode refuses shell commands, so the prompt says so up front.
+    refusesCommandsReadOnly: true,
     name: "Devin (local CLI)",
     goodFor: "General coding agent. Pass model \"swe-2\" for Devin's own fast model.",
     readOnly: "enforced",
@@ -137,6 +141,8 @@ export const LOCAL_AGENTS = [
   },
   {
     id: "cursor",
+    // Its read-only mode refuses shell commands, so the prompt says so up front.
+    refusesCommandsReadOnly: true,
     name: "Cursor Agent",
     goodFor: "Coding with any model on your Cursor plan.",
     readOnly: "enforced",

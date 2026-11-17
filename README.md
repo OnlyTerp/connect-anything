@@ -16,7 +16,7 @@ Minor: the `price === 0` skip is redundant - free items contribute `0 * qty = 0`
 
 <<reply agent=cursor id=5025ff41 untrusted>>
 **Bug: off-by-one loop bound** ... **Fix:** keep the original bound: `i < items.length`.
-Skipping `price === 0` is reasonable if free lines should not affect the total. That part is fine.
+Skipping `price === 0` is reasonable if free lines should not affect the total. That part is fine once the loop bound is fixed.
 <<end 5025ff41>>
 ```
 
@@ -135,7 +135,7 @@ Each line below is covered by a test in `test/basic.test.mjs` or was checked by 
   - Devin: the server starts at depth 1, so `ask` is refused.
   - OpenCode, OMP, Hermes: not checked. The 6-job limit is the backstop. *(tested)*
 - **Replies are framed as untrusted.** Every answer arrives as `<<reply agent=X id=N untrusted>> ... <<end N>>` with a random id, and fake markers inside an answer are defused, so one agent's reply can't pose as another's. *(tested)*
-- **No shell.** Agents are started with an argument list, never through a shell, so a prompt can't inject commands. *(tested: a prompt with `$&` arrives verbatim)*
+- **No shell.** Agents are started with an argument list, never through a shell, so a prompt can't inject commands. *(tested: a prompt full of shell syntax arrives verbatim and nothing in it runs)*
 - **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin, and needs a token for every call; the setup page holds no token. *(token checks tested)*
 - **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.
 
@@ -147,9 +147,11 @@ connect-anything runs the CLIs you installed, the same way you would from a term
 
 ## How is this different?
 
-- **[PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)** and similar "second model" servers call model APIs with API keys. connect-anything calls the agent CLIs you already use, with their tools, on your existing plans.
-- **Counselors, CAO, MCO** and other orchestrators run their own agent loops or teams. connect-anything adds nothing to the loop: the agent you're in stays in charge and simply gains a few tools.
-- It is deliberately small: zero dependencies, one file per concern, read-only by default.
+Good tools already call agent CLIs. What connect-anything is for, compared with them:
+
+- **[PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)** is an MCP server with many tools (chat, consensus, code review, planning) that mostly call model APIs with your keys; its `clink` tool also bridges to Gemini CLI, Codex and Claude Code. connect-anything does only the CLI part, with no API keys and no dependencies, and adds a read-only mode it enforces per CLI, councils over a git diff, and replies framed as untrusted.
+- **[Counselors](https://github.com/aarondfrancis/counselors)** and **[MCO](https://github.com/mco-org/mco)** are command-line runners that fan a prompt out to several agent CLIs and collect the answers; your agent reaches them through a skill. connect-anything is an MCP server, so the agent you're in calls it as tools, with jobs that keep running in the background and a one-hop guard against loops.
+- **[CAO](https://github.com/awslabs/cli-agent-orchestrator)** runs a supervisor agent that drives worker agents in terminal sessions. connect-anything runs no supervisor: the agent you're in stays in charge.
 
 <details>
 <summary>Preview: cloud agents and cloud assistants (not verified end to end)</summary>
