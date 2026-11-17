@@ -99,7 +99,7 @@ async function main() {
     case "serve":
     case "setup": {
       const { serveHttp } = await import("../src/http.mjs");
-      return serveHttp({ port: Number(f.port) || 7777, open: cmd === "setup" || !!f.open, allowWrite: !!f["allow-write"] });
+      return serveHttp({ port: Number(f.port) || 7777, open: cmd === "setup" || !!f.open, allowWrite: !!f["allow-write"], publicHost: f["public-host"] });
     }
     case "--version":
     case "-v":

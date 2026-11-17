@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>connect-anything · setup</title>
+<style>
+  :root {
+    --bg: #0a0b0d; --panel: #121418; --panel2: #171a1f; --line: #23272e; --text: #e8eaed; --dim: #9aa1ab;
+    --accent: #b6ff3b; --accent-ink: #0a0b0d; --ok: #7ee787; --warn: #e3b341; --bad: #ff7b72;
+    --r: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #fff; --panel2: #f1f3f5; --line: #e2e5ea; --text: #15181d; --dim: #5b636e; --accent: #4f8a00; --accent-ink: #fff; --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+  .ver { color: var(--dim); font-size: 13px; }
+  .lede { color: var(--dim); margin: 0 0 28px; max-width: 640px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; margin-bottom: 18px; }
+  h2 { font-size: 16px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+  .step { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
+  .sub { color: var(--dim); margin: 0 0 16px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card b { font-size: 14px; }
+  .card p { margin: 0; color: var(--dim); font-size: 13px; }
+  .tag { font-size: 11px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .s-ready { color: var(--ok); } .s-ready .dot { background: var(--ok); }
+  .s-notready { color: var(--warn); } .s-notready .dot { background: var(--warn); }
+  .s-missing { color: var(--dim); } .s-missing .dot { background: var(--line); }
+  .status { font-size: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  label.h { display: flex; gap: 10px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; min-width: 250px; flex: 1 1 250px; }
+  label.h.off { opacity: .5; cursor: default; }
+  label.h small { color: var(--dim); display: block; font-size: 12px; }
+  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+  button { font: inherit; font-weight: 600; border-radius: 9px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 9px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  button:disabled { opacity: .5; cursor: progress; }
+  button.link { background: none; border: none; color: var(--dim); padding: 0; font-weight: 500; text-decoration: underline; font-size: 13px; }
+  select, textarea, input[type=text] { font: inherit; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }
+  textarea { width: 100%; min-height: 72px; resize: vertical; }
+  pre, code { font-family: var(--mono); font-size: 12.5px; }
+  pre { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 12px; white-space: pre-wrap; word-break: break-word; margin: 10px 0 0; max-height: 360px; overflow: auto; }
+  .log { list-style: none; padding: 0; margin: 12px 0 0; font-size: 13px; }
+  .log li { padding: 3px 0; }
+  .log .ok { color: var(--ok); } .log .bad { color: var(--bad); }
+  .switch { font-size: 12px; color: var(--dim); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+  .note { font-size: 13px; color: var(--dim); }
+  .err { color: var(--bad); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>connect<span>·</span>anything</h1><span class="ver">v__CA_VERSION__</span></header>
+  <p class="lede">Let every AI agent you use call the others, each on your own subscription and sign-in. Pick your agents, connect your harnesses and try a call. Nothing here leaves your machine.</p>
+
+  <section>
+    <h2><span class="step">1</span>Your agents</h2>
+    <p class="sub">Found on this computer. A green dot means installed and ready. Turn off any you don't want other agents to call.</p>
+    <div class="grid" id="agents"><p class="note">Looking…</p></div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>Connect your harnesses</h2>
+    <p class="sub">Adds the connect-anything tools and skill to these apps through their own <code>mcp add</code> or config file (a <code>.bak</code> copy is kept). Restart the app afterwards.</p>
+    <div class="row" id="harnesses"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="connect">Connect selected</button>
+      <button id="disconnect">Remove from selected</button>
+    </div>
+    <ul class="log" id="installLog"></ul>
+    <details><summary>Using another MCP app? Paste this into its config</summary><pre id="manual"></pre></details>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span>Try it</h2>
+    <p class="sub">Ask one of your agents something. It runs read-only, in the folder this page was started from.</p>
+    <div class="row" style="margin-bottom:10px"><select id="tryAgent"></select></div>
+    <textarea id="tryPrompt">In one sentence: what are you, and which model are you running?</textarea>
+    <div class="row" style="margin-top:10px"><button class="primary" id="tryBtn">Ask</button><span class="note" id="tryNote"></span></div>
+    <pre id="tryOut" hidden></pre>
+  </section>
+
+  <section>
+    <h2><span class="step">4</span>Cloud assistants <span class="tag">optional</span></h2>
+    <p class="sub">Assistants that live in the cloud (ChatGPT, claude.ai, phone apps) can reach these tools over HTTP. Keep that address private.</p>
+    <ol class="note" style="padding-left:18px;margin:0">
+      <li>Run <code>connect-anything serve</code> (this page's server already does).</li>
+      <li>Expose it with a tunnel you trust, e.g. <code>cloudflared tunnel --url http://127.0.0.1:7777</code>. Then restart with <code>--public-host &lt;your-tunnel-host&gt;</code>.</li>
+      <li>Add an MCP connector in your assistant with the URL <code>https://&lt;your-tunnel-host&gt;/mcp/&lt;token&gt;</code>.</li>
+    </ol>
+    <p class="note">Over HTTP, agents are read-only and limited to the folders in <code>settings.httpRoots</code>.</p>
+    <div class="row"><button class="link" id="showTok">Show token</button><code id="tok" hidden></code></div>
+  </section>
+
+  <section>
+    <h2><span class="step">·</span>Recent jobs</h2>
+    <pre id="jobs" class="note">—</pre>
+  </section>
+</main>
+<script>
+const TOKEN = "__CA_TOKEN__";
+const $ = (id) => document.getElementById(id);
+const api = async (p, opt = {}) => {
+  const r = await fetch(p, { ...opt, headers: { "x-ca-token": TOKEN, "content-type": "application/json", ...(opt.headers || {}) } });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+let state;
+async function load() {
+  state = await api("/api/state");
+  // 1. agents
+  $("agents").innerHTML = state.agents.map((a) => {
+    const cls = a.ready ? "s-ready" : a.installed ? "s-notready" : "s-missing";
+    const word = a.ready ? "Ready" : a.installed ? "Needs setup" : "Not installed";
+    return `<div class="card">
+      <div class="top"><b>${esc(a.name)}</b><span class="tag">${a.kind === "cloud" ? "cloud" : "local"}</span></div>
+      <span class="status ${cls}"><span class="dot"></span>${word}</span>
+      <p>${esc(a.goodFor)}</p>
+      ${a.note ? `<p>${esc(a.note)}</p>` : ""}
+      ${a.readOnly === "none" ? `<p>No read-only mode: callers must allow changes.</p>` : ""}
+      ${a.installed ? `<label class="switch"><input type="checkbox" data-agent="${esc(a.id)}" ${a.enabled ? "checked" : ""}> others may call it</label>` : ""}
+    </div>`;
+  }).join("");
+  document.querySelectorAll("[data-agent]").forEach((el) => el.onchange = () => api("/api/agents", { method: "POST", body: JSON.stringify({ id: el.dataset.agent, enabled: el.checked }) }));
+  // 2. harnesses
+  $("harnesses").innerHTML = state.harnesses.map((h) => `<label class="h ${h.detected ? "" : "off"}">
+      <input type="checkbox" value="${esc(h.id)}" ${h.detected ? "" : "disabled"} ${h.detected && !h.installed ? "checked" : ""}>
+      <span>${esc(h.name)}<small>${h.installed ? "connected" : h.detected ? "found" : "not found"}</small></span></label>`).join("");
+  $("manual").textContent = JSON.stringify(state.manual, null, 2);
+  // 3. try
+  const ready = state.agents.filter((a) => a.ready && a.enabled && a.kind === "local" && a.readOnly === "enforced");
+  $("tryAgent").innerHTML = ready.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("") || `<option>No ready local agent</option>`;
+  renderJobs(state.jobs);
+}
+function renderJobs(jobs) {
+  $("jobs").textContent = jobs.length ? jobs.map((j) => `${j.status.padEnd(9)} ${j.agent.padEnd(13)} ${j.prompt.replace(/\s+/g, " ").slice(0, 70)}`).join("\n") : "No jobs yet.";
+}
+async function doInstall(uninstall) {
+  const ids = [...document.querySelectorAll("#harnesses input:checked")].map((i) => i.value);
+  if (!ids.length) return;
+  const btns = [$("connect"), $("disconnect")];
+  btns.forEach((b) => (b.disabled = true));
+  $("installLog").innerHTML = "<li>Working…</li>";
+  try {
+    const { result } = await api("/api/install", { method: "POST", body: JSON.stringify({ harnesses: ids, uninstall }) });
+    $("installLog").innerHTML = result.map((r) => `<li class="${r.ok ? "ok" : "bad"}">${r.ok ? "✓" : "✗"} ${esc(r.harness)}: ${esc(r.message)}</li>`).join("");
+    await load();
+  } catch (e) { $("installLog").innerHTML = `<li class="bad">${esc(e.message)}</li>`; }
+  btns.forEach((b) => (b.disabled = false));
+}
+$("connect").onclick = () => doInstall(false);
+$("disconnect").onclick = () => doInstall(true);
+$("tryBtn").onclick = async () => {
+  const b = $("tryBtn"); b.disabled = true; $("tryOut").hidden = false; $("tryOut").textContent = "Asking…"; $("tryNote").textContent = "";
+  const t0 = Date.now();
+  try {
+    const { job } = await api("/api/ask", { method: "POST", body: JSON.stringify({ agent: $("tryAgent").value, prompt: $("tryPrompt").value }) });
+    for (;;) {
+      const r = await api(`/api/job/${job.id}`);
+      $("tryNote").textContent = `${Math.round((Date.now() - t0) / 1000)} s`;
+      if (["done", "failed", "cancelled"].includes(r.job.status)) { $("tryOut").textContent = r.job.status === "done" ? r.job.result : (r.job.error || r.text); break; }
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+  } catch (e) { $("tryOut").textContent = e.message; }
+  b.disabled = false;
+  api("/api/state").then((s) => renderJobs(s.jobs));
+};
+$("showTok").onclick = () => { $("tok").hidden = !$("tok").hidden; $("tok").textContent = TOKEN; };
+load().catch((e) => { $("agents").innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+</script>
+</body>
+</html>
