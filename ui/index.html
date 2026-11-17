@@ -34,6 +34,7 @@
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
   .s-ready { color: var(--ok); } .s-ready .dot { background: var(--ok); }
   .s-notready { color: var(--warn); } .s-notready .dot { background: var(--warn); }
+  .s-unknown { color: var(--dim); } .s-unknown .dot { background: var(--ok); opacity: .45; }
   .s-missing { color: var(--dim); } .s-missing .dot { background: var(--line); }
   .status { font-size: 12px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -98,7 +99,7 @@
       <li>Expose it with a tunnel you trust, e.g. <code>cloudflared tunnel --url http://127.0.0.1:7777</code>. Then restart with <code>--public-host &lt;your-tunnel-host&gt;</code>.</li>
       <li>Add an MCP connector in your assistant with the URL <code>https://&lt;your-tunnel-host&gt;/mcp/&lt;token&gt;</code>.</li>
     </ol>
-    <p class="note">Over HTTP, agents are read-only and limited to the folders in <code>settings.httpRoots</code>.</p>
+    <p class="note">Over HTTP, agents are read-only, limited to the folders in <code>settings.httpRoots</code>, and can't start cloud agents, unless you start <code>serve</code> with <code>--allow-write</code> / <code>--allow-cloud</code>.</p>
     <div class="row"><button class="link" id="showTok">Show token</button><code id="tok" hidden></code></div>
   </section>
 
@@ -108,7 +109,12 @@
   </section>
 </main>
 <script>
-const TOKEN = "__CA_TOKEN__";
+// The token arrives in the URL fragment (browsers never send it to a server), then stays in this tab only.
+const TOKEN = (() => {
+  const m = location.hash.match(/t=([A-Za-z0-9_-]+)/);
+  if (m) { sessionStorage.setItem("ca-token", m[1]); history.replaceState(null, "", location.pathname); }
+  return sessionStorage.getItem("ca-token") || "";
+})();
 const $ = (id) => document.getElementById(id);
 const api = async (p, opt = {}) => {
   const r = await fetch(p, { ...opt, headers: { "x-ca-token": TOKEN, "content-type": "application/json", ...(opt.headers || {}) } });
@@ -123,8 +129,9 @@ async function load() {
   state = await api("/api/state");
   // 1. agents
   $("agents").innerHTML = state.agents.map((a) => {
-    const cls = a.ready ? "s-ready" : a.installed ? "s-notready" : "s-missing";
-    const word = a.ready ? "Ready" : a.installed ? "Needs setup" : "Not installed";
+    const unchecked = a.ready && a.signedIn === null;
+    const cls = !a.installed ? "s-missing" : !a.ready ? "s-notready" : unchecked ? "s-unknown" : "s-ready";
+    const word = !a.installed ? "Not installed" : !a.ready ? "Needs setup" : unchecked ? "Installed (sign-in not checked)" : "Ready";
     return `<div class="card">
       <div class="top"><b>${esc(a.name)}</b><span class="tag">${a.kind === "cloud" ? "cloud" : "local"}</span></div>
       <span class="status ${cls}"><span class="dot"></span>${word}</span>
@@ -141,7 +148,7 @@ async function load() {
       <span>${esc(h.name)}<small>${h.installed ? "connected" : h.detected ? "found" : "not found"}</small></span></label>`).join("");
   $("manual").textContent = JSON.stringify(state.manual, null, 2);
   // 3. try
-  const ready = state.agents.filter((a) => a.ready && a.enabled && a.kind === "local" && a.readOnly === "enforced");
+  const ready = state.agents.filter((a) => a.ready && a.enabled && a.kind === "local" && a.readOnly === "enforced" && !a.experimental);
   $("tryAgent").innerHTML = ready.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("") || `<option>No ready local agent</option>`;
   renderJobs(state.jobs);
 }
@@ -179,7 +186,8 @@ $("tryBtn").onclick = async () => {
   api("/api/state").then((s) => renderJobs(s.jobs));
 };
 $("showTok").onclick = () => { $("tok").hidden = !$("tok").hidden; $("tok").textContent = TOKEN; };
-load().catch((e) => { $("agents").innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+if (!TOKEN) $("agents").innerHTML = `<p class="err">Open this page with the link <code>connect-anything setup</code> prints: it carries the key.</p>`;
+else load().catch((e) => { $("agents").innerHTML = `<p class="err">${esc(e.message)}</p>`; });
 </script>
 </body>
 </html>

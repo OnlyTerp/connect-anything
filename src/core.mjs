@@ -5,9 +5,11 @@ import { isFinal, listJobs, patchJob, readJob, readOutput, startJob, waitJob } f
 import * as mailbox from "./mailbox.mjs";
 import { killTree } from "./spawn.mjs";
 import { readSettings } from "./home.mjs";
+import { existsSync, statSync } from "node:fs";
+import path from "node:path";
 
 /** How deep a chain of agents calling agents may go (A asks B asks C...). */
-export const MAX_DEPTH = Number(process.env.CONNECT_ANYTHING_MAX_DEPTH || 2);
+export const MAX_DEPTH = Number(process.env.CONNECT_ANYTHING_MAX_DEPTH || 1);
 /** How many jobs may run at once, across every caller. A runaway loop hits this wall. */
 export const MAX_RUNNING = Number(process.env.CONNECT_ANYTHING_MAX_RUNNING || 6);
 // Many MCP clients give a tool call about 60 s, so never block longer than 50 s.
@@ -33,7 +35,7 @@ export async function listAgents() {
 export function describeAgents(list) {
   const lines = ["Agents you can call with `ask`:", ""];
   for (const a of list) {
-    const mark = !a.enabled ? "off" : a.ready ? "ready" : a.installed ? "not ready" : "not installed";
+    const mark = !a.enabled ? "off" : !a.installed ? "not installed" : !a.ready ? "not ready" : a.signedIn === null ? "installed (sign-in not checked)" : "ready";
     const ro = a.readOnly === "none" ? " No read-only mode: needs write: true." : "";
     lines.push(`- ${a.id} (${a.name}, ${a.kind}) — ${mark}. ${a.goodFor}${ro}${a.note ? ` [${a.note}]` : ""}`);
   }
@@ -48,13 +50,14 @@ export async function ask({ agent, prompt, cwd, model, write = false, repo, bran
   if ((readSettings().disabled || []).includes(a.id)) throw new Error(`${a.name} is turned off in connect-anything settings.`);
   const depth = Number(process.env.CONNECT_ANYTHING_DEPTH || 0);
   if (depth >= MAX_DEPTH) {
-    throw new Error(`Refused: this is already an agent called by an agent (depth ${depth}). connect-anything stops chains at depth ${MAX_DEPTH} so agents can't loop calling each other.`);
+    throw new Error(`Refused: you were called by another agent through connect-anything, and called agents can't call further agents (this prevents loops). Answer with what you have.`);
   }
   const running = listJobs({ limit: 200 }).filter((j) => !isFinal(j) && !stale(j)).length;
   if (running >= MAX_RUNNING) {
     throw new Error(`Refused: ${running} jobs are already running (limit ${MAX_RUNNING}). Wait for one to finish or cancel one.`);
   }
-  const dir = cwd || process.cwd();
+  const dir = path.resolve(cwd || process.cwd());
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Error(`cwd is not a folder: ${dir}`);
   if (a.readOnly === "none" && !write) {
     throw new Error(`${a.name} has no read-only mode, so connect-anything won't run it as read-only. Pass write: true only if the user is fine with it changing files and running commands in ${dir}.`);
   }

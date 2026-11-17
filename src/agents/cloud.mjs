@@ -191,7 +191,10 @@ const claudeCloud = {
     };
   },
   async poll(job) {
-    const r = await run("git", ["ls-remote", `https://github.com/${job.meta?.slug}.git`, `refs/heads/${job.remoteId}`], { cwd: job.cwd, timeoutMs: 30_000 });
+    // Use the folder's own origin when it is that repo, so private repos use your git credentials.
+    const o = await run("git", ["-C", job.cwd, "remote", "get-url", "origin"], { timeoutMs: 10_000 });
+    const remote = o.stdout.toLowerCase().includes(String(job.meta?.slug).toLowerCase()) ? "origin" : `https://github.com/${job.meta?.slug}.git`;
+    const r = await run("git", ["-C", job.cwd, "ls-remote", remote, `refs/heads/${job.remoteId}`], { timeoutMs: 30_000 });
     if (r.stdout.trim()) {
       return {
         status: "done",
@@ -203,12 +206,14 @@ const claudeCloud = {
 };
 
 /** Open a visible terminal running `connect-anything _tty <jobId>` (a CLI that needs a TTY gets one). */
-function openTerminal(jobId, cwd) {
+export function openTerminal(jobId, cwd) {
   if (!/^[A-Za-z0-9-]+$/.test(jobId)) throw new Error("bad job id");
   const argv = [process.execPath, BIN, "_tty", jobId];
   if (process.platform === "win32") {
     const q = (s) => `"${s}"`; // paths and a checked job id: no quotes or % inside
-    spawn("cmd.exe", ["/d", "/c", "start", '"connect-anything"', "/D", q(cwd), ...argv.map(q)], { detached: true, stdio: "ignore", windowsVerbatimArguments: true, windowsHide: false }).unref();
+    // Only fixed paths and a checked job id reach cmd.exe; `_tty` sets the working folder itself.
+    for (const a of argv) if (/["%^&|<>]/.test(a)) throw new Error(`Can't open a terminal: unsafe characters in ${a}`);
+    spawn("cmd.exe", ["/d", "/c", "start", '"connect-anything"', ...argv.map(q)], { detached: true, stdio: "ignore", windowsVerbatimArguments: true, windowsHide: false }).unref();
   } else if (process.platform === "darwin") {
     const line = argv.map((s) => `'${s.replace(/'/g, `'\\''`)}'`).join(" ");
     const cd = `cd '${cwd.replace(/'/g, `'\\''`)}'`;

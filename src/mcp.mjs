@@ -101,7 +101,7 @@ async function callTool(name, args = {}, ctx = {}) {
     case "agents":
       return text(core.describeAgents(await core.listAgents()));
     case "ask": {
-      const res = await core.ask({ ...args, caller: ctx.caller });
+      const res = await core.ask({ ...args, caller: ctx.caller || clientName });
       return text(core.describeJob(res));
     }
     case "job": {
@@ -123,6 +123,9 @@ async function callTool(name, args = {}, ctx = {}) {
 }
 
 /** Handle one JSON-RPC message. Returns a response object, or null for notifications. */
+/** The harness that connected (from initialize), recorded on its jobs. */
+let clientName = null;
+
 export async function handle(msg, ctx = {}) {
   const { id, method, params } = msg || {};
   const reply = (result) => ({ jsonrpc: "2.0", id, result });
@@ -132,6 +135,7 @@ export async function handle(msg, ctx = {}) {
     switch (method) {
       case "initialize": {
         const asked = params?.protocolVersion;
+        if (typeof params?.clientInfo?.name === "string") clientName = params.clientInfo.name.slice(0, 60);
         return reply({
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
           capabilities: { tools: { listChanged: false } },

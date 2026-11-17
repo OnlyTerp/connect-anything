@@ -30,6 +30,7 @@ before(() => {
       custom: [
         { id: "fake", name: "Fake", command: process.execPath, args: [fake], stdin: true, readOnly: "enforced" },
         { id: "rw", name: "Writer", command: process.execPath, args: [fake], stdin: true },
+        { id: "argv", name: "Argv", command: process.execPath, args: ["-e", "console.log('arg:'+process.argv.at(-1))", "{prompt}"], readOnly: "enforced" },
       ],
     }),
   );
@@ -93,17 +94,28 @@ test("agents without read-only mode refuse unless write: true", async () => {
   assert.match(textOf(ok), /echo:ih/);
 });
 
-test("chains stop at depth 2", async () => {
-  const [r] = await mcp([call(1, "ask", { agent: "fake", prompt: "hi" })], { CONNECT_ANYTHING_DEPTH: "2" });
+test("a called agent can't call further agents", async () => {
+  const [r] = await mcp([call(1, "ask", { agent: "fake", prompt: "hi" })], { CONNECT_ANYTHING_DEPTH: "1" });
   assert.equal(r.result.isError, true);
-  assert.match(textOf(r), /depth 2/);
+  assert.match(textOf(r), /called agents can't call further agents/);
 });
 
-test("the agent's child gets the next depth", async () => {
-  const [r] = await mcp([call(1, "ask", { agent: "fake", prompt: "x" })], { CONNECT_ANYTHING_DEPTH: "1" });
+test("the called agent is started with depth 1", async () => {
+  const [r] = await mcp([call(1, "ask", { agent: "fake", prompt: "x" })]);
   const id = textOf(r).match(/Job (\S+)/)[1];
   const job = JSON.parse(readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "jobs", id, "job.json"), "utf8"));
-  assert.equal(job.depth, 2);
+  assert.equal(job.depth, 1);
+});
+
+test("a cwd that is not a folder is refused", async () => {
+  const [r] = await mcp([call(1, "ask", { agent: "fake", prompt: "x", cwd: path.join(process.env.CONNECT_ANYTHING_HOME, 'no"such&dir') })]);
+  assert.equal(r.result.isError, true);
+  assert.match(textOf(r), /not a folder/);
+});
+
+test("custom agents get the prompt verbatim, even with $& in it", async () => {
+  const [r] = await mcp([call(1, "ask", { agent: "argv", prompt: "a$&b$'c" })]);
+  assert.match(textOf(r), /arg:\[You were called[^]*\n\na\$&b\$'c$/);
 });
 
 test("inbox: send, read once, then empty", async () => {

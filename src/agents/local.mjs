@@ -114,7 +114,7 @@ export const LOCAL_AGENTS = [
   {
     id: "devin",
     name: "Devin (local CLI)",
-    goodFor: "General coding agent; the SWE-2 model is free on Devin plans (--model swe-2).",
+    goodFor: "General coding agent; SWE-2 (--model swe-2) is Devin's own fast model, free on some plans.",
     readOnly: "enforced",
     install: "Install the Devin CLI: https://docs.devin.ai/cli",
     signIn: "Run `devin auth login`.",
@@ -249,6 +249,8 @@ for (const a of LOCAL_AGENTS) {
     return {
       installed: true,
       ready: signed !== false,
+      signedIn: signed,
+      experimental: !!a.experimental,
       readOnly: a.readOnly,
       note: [signed === false ? "not signed in" : null, a.experimental ? "experimental" : null].filter(Boolean).join(", ") || undefined,
     };

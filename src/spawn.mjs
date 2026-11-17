@@ -45,10 +45,8 @@ export function resolveCommand(name, env = process.env) {
     if (target) return target;
   }
   if (existsSync(base + ".exe")) return { command: base + ".exe", prefix: [] };
-  // Last resort: run the .ps1 through PowerShell with -File (still no shell string parsing).
-  if (existsSync(base + ".ps1")) {
-    return { command: "powershell.exe", prefix: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", base + ".ps1"] };
-  }
+  // No fallback through cmd.exe or PowerShell: both re-parse arguments, and prompts travel as
+  // arguments. Set CONNECT_ANYTHING_<ID>_BIN to the real executable instead.
   return null;
 }
 

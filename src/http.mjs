@@ -3,10 +3,12 @@
 // Security:
 // - Binds 127.0.0.1. Requests whose Host isn't this machine (or the --public-host you chose for a
 //   tunnel) are refused, which blocks DNS-rebinding pages.
-// - Every API call and every MCP call needs the token from <home>/token (a browser page from
-//   another site can't read it). The setup page gets it embedded when you open it locally.
-// - Over HTTP, agents run read-only unless the server was started with --allow-write, and only in
-//   folders listed in settings.httpRoots (default: the folder the server started in).
+// - Every API call and every MCP call needs the token from <home>/token (a page from another site
+//   can't read it). The setup page never contains it: `setup` opens the page with the token in
+//   the URL fragment (#t=...), which browsers keep to themselves.
+// - Over HTTP, agents run read-only unless the server was started with --allow-write, only in folders
+//   listed in settings.httpRoots (default: the folder the server started in), and never start
+//   cloud agents (they spend your plan) unless started with --allow-cloud.
 
 import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -34,7 +36,7 @@ const same = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-export function serveHttp({ port = 7777, open = false, allowWrite = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST } = {}) {
+export function serveHttp({ port = 7777, open = false, allowWrite = false, allowCloud = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST } = {}) {
   const tok = token();
   const startDir = process.cwd();
   const okHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost.toLowerCase()] : [])]);
@@ -52,10 +54,10 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, publi
       const url = new URL(req.url, `http://${host}`);
       const local = host.startsWith("127.0.0.1:") || host.startsWith("localhost:");
 
-      // The setup page (local only), with the token embedded.
+      // The setup page. It holds no token: the token travels in the URL fragment.
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         if (!local) return send(404, { error: "Not found" });
-        const html = readFileSync(UI, "utf8").replace("__CA_TOKEN__", tok).replace("__CA_VERSION__", VERSION);
+        const html = readFileSync(UI, "utf8").replace("__CA_VERSION__", VERSION);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:", "X-Frame-Options": "DENY" });
         return res.end(html);
       }
@@ -70,7 +72,7 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, publi
         if (req.method === "DELETE") return send(200, {});
         if (req.method !== "POST") return send(405, { error: "POST only." });
         const msg = await body(req);
-        const guard = { remote: true, allowWrite, roots: roots(startDir) };
+        const guard = { remote: true, allowWrite, allowCloud, roots: roots(startDir) };
         const msgs = Array.isArray(msg) ? msg : [msg];
         const out = [];
         for (const m of msgs) {
@@ -144,11 +146,13 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, publi
   server.listen(port, "127.0.0.1", () => {
     const u = `http://127.0.0.1:${port}/`;
     console.log(`connect-anything ${VERSION}`);
-    console.log(`  setup page:  ${u}`);
+    const page = `${u}#t=${tok}`;
+    console.log(`  setup page:  ${page}`);
     console.log(`  MCP (HTTP):  ${u}mcp   (Authorization: Bearer <token in ${path.join(home(), "token")}>)`);
     if (publicHost) console.log(`  also answering as ${publicHost} (your tunnel)`);
     if (!allowWrite) console.log("  HTTP callers are read-only (start with --allow-write to change that).");
-    if (open) openBrowser(u);
+    if (!allowCloud) console.log("  HTTP callers can't start cloud agents (start with --allow-cloud to change that).");
+    if (open) openBrowser(page);
   });
   return server;
 }
@@ -160,9 +164,12 @@ function roots(startDir) {
 }
 
 /** Enforce the HTTP rules on an MCP tool call before it reaches the core. */
-function restrict(m, { allowWrite, roots: rs }) {
+function restrict(m, { allowWrite, allowCloud, roots: rs }) {
   if (m?.method !== "tools/call" || m.params?.name !== "ask") return m;
   const a = { ...(m.params.arguments || {}) };
+  if (/[-_]cloud$/i.test(String(a.agent || "")) && !allowCloud) {
+    throw new Error("Over HTTP, cloud agents are off (they spend your plan and push branches). Restart `connect-anything serve` with --allow-cloud to allow them.");
+  }
   if (a.write && !allowWrite) throw new Error("Over HTTP, agents are read-only. Restart connect-anything serve with --allow-write to allow changes.");
   a.cwd = path.resolve(a.cwd || rs[0]);
   const inside = rs.some((r) => a.cwd === r || a.cwd.startsWith(r + path.sep));

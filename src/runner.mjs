@@ -57,6 +57,10 @@ async function runLocal(job, agent) {
   } else if (parsed.error || (r.code !== 0 && !parsed.text)) {
     const why = parsed.error || lastLine(r.stderr) || `exited with code ${r.code}`;
     patchJob(job.id, { status: "failed", error: why, pid: null, endedAt: ended });
+  } else if (!String(parsed.text ?? "").trim()) {
+    // An empty answer is a failure the caller should see, with whatever the agent printed to stderr.
+    const why = lastLine(r.stderr);
+    patchJob(job.id, { status: "failed", error: `${agent.name} finished without an answer.${why ? ` It said: ${why}` : ""}`, pid: null, endedAt: ended });
   } else {
     patchJob(job.id, { status: "done", result: parsed.text, meta: parsed.meta || null, pid: null, endedAt: ended });
   }

@@ -4,7 +4,7 @@
 
 You pay for Claude, ChatGPT, Devin, Cursor… and each agent lives in its own box. connect-anything gives every one of them the same small toolset to reach the others:
 
-> *"Ask Codex to review this diff."* · *"Have Devin (free SWE-2) write the tests while you keep going."* · *"Start a Claude Code cloud agent on this repo and tell me when the branch is up."*
+> *"Ask Codex to review this diff."* · *"Have Devin (SWE-2) write the tests while you keep going."* · *"Start a Claude Code cloud agent on this repo and tell me when the branch is up."*
 
 - **One MCP server + one skill.** Works in any harness that speaks MCP (Claude Code, Codex, Cursor, Devin, OpenCode, Grok, Claude Desktop, …) or has a shell.
 - **Your own sign-ins.** Each agent runs through its official CLI, logged in as you, on your plan. No API keys needed, and connect-anything never reads another tool's tokens.
@@ -20,7 +20,7 @@ cd connect-anything
 node bin/connect-anything.mjs setup
 ```
 
-The setup page opens at `http://127.0.0.1:7777`:
+The setup page opens at `http://127.0.0.1:7777` (the link it opens carries a one-time key in the `#` part, which never leaves your browser):
 
 1. **Your agents.** See what's installed and signed in, and switch off any you don't want others to call.
 2. **Connect your harnesses.** One click adds connect-anything (tools + skill) to each app it found. Restart those apps.
@@ -54,17 +54,19 @@ The bundled **skill** (`skills/connect-anything/SKILL.md`) teaches agents when t
 |---|---|---|---|---|
 | `claude` | Claude Code | `claude -p --output-format json` | ✅ plan mode | ✅ tested |
 | `codex` | Codex CLI | `codex exec --json -s read-only` | ✅ sandbox | ✅ tested (incl. usage-limit errors) |
-| `devin` | Devin CLI | `devin -p --prompt-file` | ✅ `auto` permissions | ✅ tested (`--model swe-2` is free) |
+| `devin` | Devin CLI | `devin -p --prompt-file` | ✅ `auto` permissions | ✅ tested (`--model swe-2` is Devin's own fast model) |
 | `cursor` | Cursor Agent | `cursor-agent -p --mode ask` | ✅ ask mode | ✅ tested |
 | `omp` | OMP | `omp -p --mode json` | ❌ needs `write: true` | ✅ tested |
 | `opencode` | OpenCode | `opencode run --format json` | ❌ needs `write: true` | ⚠️ parser not yet seen succeed |
 | `hermes` | Hermes Agent | `hermes -z` | ❌ needs `write: true` | ⚠️ experimental |
 | `grok` | Grok CLI | `grok --prompt-file` | ✅ plan mode | ⚠️ experimental (headless hung in our test) |
-| `claude-cloud` | Claude Code on the web | official `claude --cloud`, in a terminal window it opens | cloud sandbox | ⚠️ unverified |
+| `claude-cloud` | Claude Code on the web | official `claude --cloud`, in a terminal window it opens | cloud sandbox | ⚠️ unverified end to end (the terminal hand-off is tested) |
 | `codex-cloud` | Codex Cloud | `codex cloud exec` | cloud sandbox | ⚠️ unverified (needs a cloud environment per repo) |
 | `devin-cloud` | Devin Cloud | `devin --cloud -p`, or the Devin v3 API if `DEVIN_API_KEY` + `DEVIN_ORG_ID` are set | cloud sandbox | ⚠️ unverified |
 
 *Tested* means a real call went through connect-anything and came back right, on Windows, in November 2026. Agents marked "needs `write: true`" have no real read-only mode, so connect-anything won't pretend they do.
+
+Read-only was checked by asking `claude`, `cursor` and `devin` to create a file in read-only mode: none of them did (Claude Code and Cursor refused; Devin's `auto` mode blocked the write). An agent that finishes with an empty answer is reported as failed, with what it printed.
 
 ### Any other agent
 
@@ -109,14 +111,16 @@ connect-anything serve --public-host your-name.trycloudflare.com
 
 Then add an MCP connector with the URL `https://<host>/mcp/<token>`. The token is in `~/.connect-anything/token`, and `Authorization: Bearer <token>` works too.
 
-Over HTTP, agents are **read-only** unless you start with `--allow-write`, and they may only work in the folders listed in `settings.httpRoots` (default: the folder `serve` started in).
+Over HTTP, agents are **read-only** unless you start with `--allow-write`, may only work in the folders listed in `settings.httpRoots` (default: the folder `serve` started in), and **can't start cloud agents** (which spend your plan) unless you start with `--allow-cloud`.
+
+> This HTTP route is tested with `curl` and the setup page on this machine, not yet with a real ChatGPT or claude.ai connector through a tunnel. Treat it as a preview.
 
 ## Safety
 
 - **Read-only by default.** Write access is a per-call opt-in (`write: true` / `--write`), and agents without a real read-only mode refuse to run without it.
-- **No loops.** Agents called through connect-anything can't call further agents: chains stop at depth 2 (`CONNECT_ANYTHING_MAX_DEPTH`). At most 6 jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`), as a backstop. Child Claude Code runs start with no MCP servers.
+- **No loops.** Agents called through connect-anything can't call further agents: an agent you call gets the tools refused (`CONNECT_ANYTHING_MAX_DEPTH`, default 1). Tested with Claude Code as the outer harness. At most 6 jobs run at once (`CONNECT_ANYTHING_MAX_RUNNING`), as a backstop. Child Claude Code runs start with no MCP servers.
 - **No shell.** Agents are spawned with argv, never through a shell, so prompts can't inject commands.
-- **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin (blocking DNS rebinding and cross-site requests), and needs a token for every call.
+- **Local only.** The HTTP server binds 127.0.0.1, checks Host and Origin (blocking DNS rebinding and cross-site requests), and needs a token for every call. The setup page itself contains no token.
 - **Your tokens stay put.** connect-anything never reads another tool's credentials. Each CLI uses its own sign-in.
 - **Replies are data.** The skill and the tool descriptions tell agents to treat other agents' replies and inbox messages as information, not as the user's instructions.
 

@@ -26,7 +26,7 @@ function customAgents() {
         readOnly: c.readOnly === "enforced" ? "enforced" : "none",
         command: () => resolveCommand(c.command),
         build: ({ prompt, promptFile, write }) => ({
-          args: (write && c.writeArgs ? c.writeArgs : c.args || []).map((s) => String(s).replace("{prompt}", prompt).replace("{promptFile}", promptFile)),
+          args: (write && c.writeArgs ? c.writeArgs : c.args || []).map((s) => String(s).replace("{prompt}", () => prompt).replace("{promptFile}", () => promptFile)),
           stdin: !!c.stdin,
         }),
         parse: (stdout) => ({ text: stdout.trim() }),
