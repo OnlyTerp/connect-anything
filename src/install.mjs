@@ -8,12 +8,37 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { LOCAL_AGENTS } from "./agents/local.mjs";
 import { run } from "./spawn.mjs";
+import { home as caHome } from "./home.mjs";
+import { VERSION } from "./version.mjs";
 
 const NAME = "connect-anything";
 const BIN = fileURLToPath(new URL("../bin/connect-anything.mjs", import.meta.url));
 const SKILL_DIR = fileURLToPath(new URL("../skills/connect-anything", import.meta.url));
-/** How every harness launches the server: this Node, this script. No PATH lookups at run time. */
-export const SERVER = { command: process.execPath, args: [BIN, "mcp"] };
+const PKG_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+/**
+ * The script your apps will launch. Run through npx, this package lives in npm's cache, which npm
+ * may prune; so it is copied once to <home>/app/<version>/ and that copy is registered. No network
+ * at app start, no silent updates: run `install` again after upgrading.
+ */
+function stableBin() {
+  if (!/[\\/]_npx[\\/]/.test(PKG_ROOT)) return BIN;
+  const dest = path.join(caHome(), "app", VERSION);
+  if (!existsSync(path.join(dest, "bin", "connect-anything.mjs"))) {
+    for (const d of ["bin", "src", "ui", "skills", "package.json", "LICENSE"]) {
+      if (existsSync(path.join(PKG_ROOT, d))) cpSync(path.join(PKG_ROOT, d), path.join(dest, d), { recursive: true });
+    }
+  }
+  return path.join(dest, "bin", "connect-anything.mjs");
+}
+
+/** How every harness launches the server: this Node, an absolute script path. No PATH lookups at run time. */
+export const SERVER = {
+  command: process.execPath,
+  get args() {
+    return [stableBin(), "mcp"];
+  },
+};
 
 const home = () => process.env.CONNECT_ANYTHING_INSTALL_HOME || os.homedir();
 const appData = () => (process.env.CONNECT_ANYTHING_INSTALL_HOME ? path.join(home(), "AppData/Roaming") : process.env.APPDATA || path.join(home(), "Library/Application Support"));

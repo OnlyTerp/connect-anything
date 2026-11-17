@@ -1,7 +1,8 @@
 {
   "name": "connect-anything",
-  "version": "0.1.0",
-  "description": "Let any AI agent call your other agents — Claude Code, Codex, Devin, Cursor, cloud agents — on your own subscriptions. One MCP server, one skill, zero dependencies.",
+  "version": "0.2.0",
+  "description": "Let the coding agent you're in ask your other agents (Codex, Devin, Cursor, Claude Code) through their official CLIs, on your own sign-ins. One MCP server, zero dependencies.",
+  "mcpName": "io.github.OnlyTerp/connect-anything",
   "type": "module",
   "bin": {
     "connect-anything": "bin/connect-anything.mjs"
@@ -21,15 +22,27 @@
   "engines": {
     "node": ">=18.17"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OnlyTerp/connect-anything.git"
+  },
+  "homepage": "https://github.com/OnlyTerp/connect-anything#readme",
+  "bugs": {
+    "url": "https://github.com/OnlyTerp/connect-anything/issues"
+  },
   "keywords": [
     "mcp",
-    "agents",
+    "mcp-server",
+    "model-context-protocol",
     "claude-code",
     "codex",
-    "devin",
     "cursor",
+    "devin",
+    "ai-agents",
     "multi-agent",
-    "skills"
+    "code-review",
+    "second-opinion",
+    "agent-skills"
   ],
   "license": "MIT"
 }

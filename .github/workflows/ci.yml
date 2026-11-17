@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Pack and run the tarball
+        shell: bash
+        run: |
+          npm pack
+          mkdir -p "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE"/connect-anything-*.tgz
+          npx connect-anything version
+          npx connect-anything agents --all

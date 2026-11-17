@@ -97,7 +97,8 @@ export function describeAgents(list, { all = false } = {}) {
  * Agents with no read-only mode are skipped (doctor never runs anything with write access).
  */
 export async function doctor({ only = null, onResult = () => {} } = {}) {
-  const list = (await listAgents()).filter((a) => a.kind === "local" && a.enabled && a.installed && (!only || only.includes(a.id)));
+  // Preview agents (e.g. a CLI known to hang headless) are only checked when named.
+  const list = (await listAgents()).filter((a) => a.kind === "local" && a.enabled && a.installed && (only ? only.includes(a.id) : !a.preview));
   const results = {};
   const queue = [...list];
   const one = async (a) => {

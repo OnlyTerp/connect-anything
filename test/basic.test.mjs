@@ -177,6 +177,8 @@ test("over HTTP: no token in the page, cloud agents refused however spelled, loc
     await new Promise((res) => p.stdout.on("data", (d) => String(d).includes("setup page") && res()));
     const tok = readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "token"), "utf8").trim();
     const page = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+    const wrong = await fetch(`http://127.0.0.1:${port}/mcp/not-the-token`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call(1, "agents", {})) });
+    assert.ok(wrong.status >= 400, "a wrong token must be refused");
     assert.ok(!page.includes(tok), "the setup page must not contain the token");
     for (const agent of ["devin-cloud", "devin-cloud ", "DEVIN_CLOUD", "claude-cloud"]) {
       const r = await fetch(`http://127.0.0.1:${port}/mcp/${tok}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call(1, "ask", { agent, prompt: "hi" })) });
@@ -269,4 +271,11 @@ test("long prompts: argv-only agents attach a file or are refused, never truncat
   const omp = LOCAL_AGENTS.find((a) => a.id === "omp").build({ prompt: long, promptFile: "P" });
   assert.ok(!omp.args.includes(long) && omp.args.includes("@P"));
   assert.ok(LOCAL_AGENTS.find((a) => a.id === "cursor").maxPromptChars <= 30_000);
+});
+
+test("the running-job limit refuses new asks", async () => {
+  const [first] = await mcp([call(1, "ask", { agent: "fake", prompt: "SLOW", wait_s: 0 })]);
+  assert.match(textOf(first), /Job /);
+  const [second] = await mcp([call(1, "ask", { agent: "fake", prompt: "hi" })], { CONNECT_ANYTHING_MAX_RUNNING: "1" });
+  assert.match(textOf(second), /already running \(limit 1\)/);
 });

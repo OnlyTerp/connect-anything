@@ -1,0 +1,39 @@
+name: Works / breaks with my agent CLI
+description: Tell us how connect-anything behaved with a CLI you have installed.
+labels: [agent-report]
+body:
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options: [Works, Breaks, Partly works]
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent CLI and version
+      description: For example `codex --version`, `cursor-agent --version`.
+    validations:
+      required: true
+  - type: input
+    id: caller
+    attributes:
+      label: App you called it from
+      description: Claude Code, Codex, Cursor, OpenCode, ...
+  - type: input
+    id: os
+    attributes:
+      label: OS and Node version
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `npx connect-anything doctor`
+      description: Remove anything private before pasting.
+      render: text
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
