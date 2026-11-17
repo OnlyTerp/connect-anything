@@ -48,6 +48,8 @@ const HELP = () => `connect-anything ${VERSION}: let the coding agent you're in 
   connect-anything setup                 open the setup page in your browser
   connect-anything mcp                   run the MCP server on stdio (what your apps launch)
   connect-anything serve [--port 7777]   the setup page + MCP over HTTP on 127.0.0.1
+      --public-host H  also answer as your tunnel's host H, and print the connector URL to paste
+  connect-anything check-url <url>       connect to a connector URL the way an assistant app does
 
 Example:  connect-anything ask codex,devin --staged "Review this diff for bugs."
 `;
@@ -126,6 +128,13 @@ async function main() {
     case "setup": {
       const { serveHttp } = await import("../src/http.mjs");
       return serveHttp({ port: Number(f.port) || 7777, fixedPort: !!f.port, open: cmd === "setup" || !!f.open, allowWrite: !!f["allow-write"], allowCloud: !!f["allow-cloud"], publicHost: f["public-host"] });
+    }
+    case "check-url": {
+      const { checkConnector, describeCheck } = await import("../src/connector.mjs");
+      const c = await checkConnector(String(rest.find((x) => !x.startsWith("--")) || ""));
+      console.log(describeCheck(c));
+      process.exitCode = c.ok ? 0 : 1;
+      return;
     }
     case "--version":
     case "-v":

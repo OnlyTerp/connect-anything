@@ -1,6 +1,6 @@
 {
   "name": "connect-anything",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Let the coding agent you're in ask your other agents (Codex, Devin, Cursor, Claude Code) through their official CLIs, on your own sign-ins. One MCP server, zero dependencies.",
   "mcpName": "io.github.OnlyTerp/connect-anything",
   "type": "module",

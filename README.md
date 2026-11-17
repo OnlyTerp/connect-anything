@@ -177,14 +177,32 @@ Good tools already call agent CLIs. What connect-anything is for, compared with 
 **Cloud assistants** (browser and phone apps that accept an MCP connector URL) can use the same tools over HTTP:
 
 ```bash
-connect-anything serve --port 7777
-cloudflared tunnel --url http://127.0.0.1:7777          # or any tunnel you trust
-connect-anything serve --public-host your-name.trycloudflare.com
+cloudflared tunnel --url http://127.0.0.1:7777                    # or any tunnel you trust; note the https host it prints
+connect-anything serve --port 7777 --public-host <that-host>
 ```
 
-The connector URL is `https://<host>/mcp/<token>` (token in `~/.connect-anything/token`; `Authorization: Bearer <token>` works too). Over HTTP, callers see only their own jobs, agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. Checked through a public Cloudflare quick tunnel with a real MCP client (Claude Code given the https URL and token): `ask` came back with Devin's review, a `write: true` call and a folder outside the allowed one were both refused, and from the public host the setup page and its API answer 404 and a wrong token 401. Not yet checked from a named assistant app (ChatGPT, Claude, Grok and others each need their custom-connector setting turned on, which is up to you).
+`serve` then prints one **connector URL**, `https://<host>/mcp/<key>`, and connects to it from outside the way an app does when you press Connect: initialize with an app's `Origin`, the follow-up notification, a GET, `tools/list`, and the OAuth discovery address. It prints `ok` for each step, or the fix. `connect-anything check-url <url>` runs the same check any time.
 
-If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404; give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
+Adding it in an app:
+
+- Paste the whole connector URL. The key is in the URL, so there is no header to get right.
+- Set authentication to none: in Claude, **No sign-in**; in ChatGPT, **No authentication**. Leave request headers empty.
+- connect-anything has no OAuth. Its discovery addresses answer 404, and a wrong or old key in the URL also answers 404, never 401. An app never starts a sign-in that can't finish.
+- If you'd rather use a header, the key also works in `Authorization` (with or without `Bearer `), `X-API-Key` or `X-Auth-Token`, on `https://<host>/mcp`.
+
+Treat the connector URL like a password. Anyone with it can ask your agents. To change the key, delete `~/.connect-anything/token` and restart `serve`.
+
+Over HTTP, callers see only their own jobs. Agents are read-only unless you start with `--allow-write`, work only in `settings.httpRoots`, and can't start cloud agents unless you pass `--allow-cloud`. On your own machine a browser page from another site is refused (Host and Origin checks). On the tunnel host only `/mcp/<key>` exists; the setup page and its API answer 404 there.
+
+What has been checked, through a public Cloudflare quick tunnel:
+- `serve`'s own connect check passed every step.
+- The official MCP TypeScript SDK client (1.32.2), sending `Origin: https://claude.ai`, connected and listed the tools.
+- Claude Code, given the URL, got Devin's review back from `ask`.
+- A `write: true` call, a folder outside the allowed one, and a wrong key were all refused.
+
+The app steps above follow Claude's and OpenAI's connector docs. Connecting from inside a named assistant app (ChatGPT, Claude, Grok, Gemini) hasn't been tried yet; each needs its custom-connector setting turned on, which is up to you.
+
+Quick-tunnel addresses change every time cloudflared starts. If `serve` was started with an old `--public-host`, requests are refused with the flag to restart with. If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404 (the check says so). Give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
 </details>
 
 ## Where things live

@@ -98,8 +98,8 @@
     <p class="sub">Assistants that live in the cloud (ChatGPT, claude.ai, phone apps) can reach these tools over HTTP. Keep that address private.</p>
     <ol class="note" style="padding-left:18px;margin:0">
       <li>Run <code>connect-anything serve</code> (this page's server already does).</li>
-      <li>Expose it with a tunnel you trust, e.g. <code>cloudflared tunnel --url http://127.0.0.1:7777</code>. Then restart with <code>--public-host &lt;your-tunnel-host&gt;</code>.</li>
-      <li>Add an MCP connector in your assistant with the URL <code>https://&lt;your-tunnel-host&gt;/mcp/&lt;token&gt;</code>.</li>
+      <li>Expose it with a tunnel you trust, e.g. <code>cloudflared tunnel --url http://127.0.0.1:7777</code>. Then restart with <code>--public-host &lt;your-tunnel-host&gt;</code>: it prints the connector URL and checks it from outside, the way an app connects.</li>
+      <li>In your assistant, add a custom connector with that whole URL. Authentication: none (Claude: <em>No sign-in</em>, ChatGPT: <em>No authentication</em>). No headers.</li>
     </ol>
     <p class="note">Over HTTP, agents are read-only, limited to the folders in <code>settings.httpRoots</code>, and can't start cloud agents, unless you start <code>serve</code> with <code>--allow-write</code> / <code>--allow-cloud</code>.</p>
     <div class="row"><button class="link" id="showTok">Show token</button><code id="tok" hidden></code></div>

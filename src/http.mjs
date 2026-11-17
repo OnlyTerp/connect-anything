@@ -22,6 +22,7 @@ import { getAgent } from "./agents/index.mjs";
 import { home, readSettings, writeSettings } from "./home.mjs";
 import { HARNESSES, install, manualConfig } from "./install.mjs";
 import { VERSION } from "./version.mjs";
+import { checkConnector, describeCheck } from "./connector.mjs";
 
 const UI = fileURLToPath(new URL("../ui/index.html", import.meta.url));
 
@@ -50,24 +51,38 @@ function freePort(start) {
   });
 }
 
-export async function serveHttp({ port = 7777, fixedPort = false, open = false, allowWrite = false, allowCloud = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST } = {}) {
+export async function serveHttp({ port = 7777, fixedPort = false, open = false, allowWrite = false, allowCloud = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST, selfCheck = !process.env.CONNECT_ANYTHING_NO_SELFCHECK } = {}) {
   if (!fixedPort) port = await freePort(port);
+  publicHost = publicHost ? String(publicHost).replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase() : publicHost;
+  const warnedHosts = new Set();
   const tok = token();
   const startDir = process.cwd();
   const okHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost.toLowerCase()] : [])]);
 
   const server = createServer(async (req, res) => {
     const send = (code, body, type = "application/json") => {
-      res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Connect-Anything": "1" });
       res.end(typeof body === "string" ? body : JSON.stringify(body));
     };
     try {
       const host = String(req.headers.host || "").toLowerCase();
-      if (!okHosts.has(host)) return send(403, { error: "Unknown host." });
-      const origin = req.headers.origin;
-      if (origin && !okHosts.has(origin.replace(/^https?:\/\//, "").toLowerCase())) return send(403, { error: "Cross-site request refused." });
-      const url = new URL(req.url, `http://${host}`);
+      if (!okHosts.has(host)) {
+        const shown = host.replace(/[^a-z0-9.:-]/g, "").slice(0, 100);
+        if (shown && !warnedHosts.has(shown) && warnedHosts.size < 5) {
+          warnedHosts.add(shown);
+          console.log(`  Refused a request for host ${shown}. If that is your tunnel, restart with: connect-anything serve --public-host ${shown}`);
+        }
+        return send(403, { error: `Unknown host${shown ? ` ${shown}` : ""}. If this is your tunnel, restart connect-anything with --public-host ${shown || "<your-tunnel-host>"} (a quick tunnel gets a new address every time it starts).` });
+      }
       const local = host.startsWith("127.0.0.1:") || host.startsWith("localhost:");
+      // Pages in your browser may not call this server (Origin check). Assistant apps call a tunnel
+      // from their own servers and some send their Origin; the public host serves only /mcp/<key>
+      // (everything else is 404 there), so there the key is the check.
+      const origin = req.headers.origin;
+      const sameOrigin = !origin || okHosts.has(origin.replace(/^https?:\/\//, "").toLowerCase());
+      const url = new URL(req.url, `http://${host}`);
+      const mcpPath = url.pathname.match(/^\/mcp(?:\/([A-Za-z0-9_-]+))?\/?$/);
+      if (!sameOrigin && local) return send(403, { error: "Cross-site request refused." });
 
       // The setup page. It holds no token: the token travels in the URL fragment.
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
@@ -77,12 +92,16 @@ export async function serveHttp({ port = 7777, fixedPort = false, open = false, 
         return res.end(html);
       }
 
-      // MCP over HTTP: POST /mcp with "Authorization: Bearer <token>", or POST /mcp/<token> for
-      // clients that can't set headers.
-      const mcpPath = url.pathname.match(/^\/mcp(?:\/([A-Za-z0-9_-]+))?\/?$/);
+      // MCP over HTTP: POST /mcp/<token> (what apps should use: no header to get right, no sign-in),
+      // or POST /mcp with the token in Authorization (with or without "Bearer"), X-API-Key or X-Auth-Token.
+      // No OAuth: a wrong key in the path answers 404, not 401, so an app never starts a sign-in it can't finish.
       if (mcpPath) {
-        const given = mcpPath[1] || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-        if (!same(given, tok)) return send(401, { error: "Missing or wrong token." });
+        if (mcpPath[1]) {
+          if (!same(mcpPath[1], tok)) return send(404, { error: "No connector at this address. The key in the URL is wrong or old: copy the connector URL that `connect-anything serve` prints." });
+        } else {
+          const given = [String(req.headers.authorization || "").replace(/^Bearer\s+/i, ""), req.headers["x-api-key"], req.headers["x-auth-token"]].map((v) => String(v || "").trim());
+          if (!given.some((g) => same(g, tok))) return send(401, { error: "Missing or wrong key. Easiest: use the connector URL that ends in /mcp/<key> and set the app's authentication to none (no sign-in, no headers)." });
+        }
         if (req.method === "GET") return send(405, { error: "This server answers POST only (no SSE stream)." });
         if (req.method === "DELETE") return send(200, {});
         if (req.method !== "POST") return send(405, { error: "POST only." });
@@ -100,11 +119,11 @@ export async function serveHttp({ port = 7777, fixedPort = false, open = false, 
           if (r) out.push(r);
         }
         if (!out.length) {
-          res.writeHead(202);
+          res.writeHead(202, { "X-Connect-Anything": "1" });
           return res.end();
         }
         const ver = msgs.find((m) => m?.method === "initialize") ? { "Mcp-Session-Id": randomBytes(8).toString("hex") } : {};
-        res.writeHead(200, { "Content-Type": "application/json", ...ver });
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Connect-Anything": "1", ...ver });
         return res.end(JSON.stringify(Array.isArray(msg) ? out : out[0]));
       }
 
@@ -168,16 +187,36 @@ export async function serveHttp({ port = 7777, fixedPort = false, open = false, 
     console.log(`connect-anything ${VERSION}`);
     const page = `${u}#t=${tok}`;
     console.log(`  setup page:  ${page}`);
-    console.log(`  MCP (HTTP):  ${u}mcp   (Authorization: Bearer <token in ${path.join(home(), "token")}>)`);
+    console.log(`  MCP (HTTP):  ${u}mcp/<key>   (key in ${path.join(home(), "token")})`);
     if (publicHost) {
-      console.log(`  also answering as ${publicHost} (your tunnel)`);
-      console.log(`  Warning: anyone with https://${publicHost}/mcp/<token> can ask your agents. Treat that URL like a password.`);
+      const connector = `https://${publicHost}/mcp/${tok}`;
+      console.log("");
+      console.log("  Connector URL. Paste it whole into your assistant's custom connector; it is a password:");
+      console.log(`    ${connector}`);
+      console.log("  Authentication: none. In Claude pick \"No sign-in\", in ChatGPT \"No authentication\". Leave request headers empty.");
+      console.log("");
+      if (selfCheck) selfCheckLoop(connector, port);
     }
     if (!allowWrite) console.log("  HTTP callers are read-only (start with --allow-write to change that).");
     if (!allowCloud) console.log("  HTTP callers can't start cloud agents (start with --allow-cloud to change that).");
     if (open) openBrowser(page);
   });
   return server;
+}
+
+/** Check the public URL as an app would, retrying for a minute while the tunnel comes up. */
+async function selfCheckLoop(connector, port) {
+  const end = Date.now() + 60_000;
+  let c;
+  for (;;) {
+    c = await checkConnector(connector, { port, timeoutMs: 8_000 });
+    const unreachable = !c.ok && /can't reach|tunnel is up but/.test(c.advice);
+    if (c.ok || !unreachable || Date.now() > end) break;
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+  console.log(`  Connector check (from outside, as an app would connect):
+${describeCheck(c)}`);
+  if (!c.ok) console.log("  Check again any time: connect-anything check-url <connector URL>");
 }
 
 /** The folders HTTP callers may point agents at. */

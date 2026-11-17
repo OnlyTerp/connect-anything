@@ -205,6 +205,62 @@ test("over HTTP: no token in the page, cloud agents refused however spelled, loc
   }
 });
 
+test("connector: through a tunnel an app's Origin is fine with the key, no sign-in loop, clear refusals", async () => {
+  const { createServer, request } = await import("node:http");
+  const { checkConnector } = await import("../src/connector.mjs");
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const p = spawn(process.execPath, [BIN, "serve", "--port", String(port), "--public-host", "https://Tunnel.example/"], { env: { ...process.env, CONNECT_ANYTHING_NO_SELFCHECK: "1" }, stdio: ["ignore", "pipe", "inherit"] });
+  // A stand-in for the tunnel: forwards to the server with the public Host, as cloudflared does.
+  const fwd = (host, target = port) => (req, res) => {
+    const up = request({ host: "127.0.0.1", port: target, method: req.method, path: req.url, headers: { ...req.headers, host } }, (r) => (res.writeHead(r.statusCode, r.headers), r.pipe(res)));
+    req.pipe(up);
+  };
+  const tunnel = createServer(fwd("tunnel.example"));
+  const nowhere = createServer((req, res) => (res.writeHead(404), res.end("not found")));
+  await Promise.all([new Promise((r) => tunnel.listen(0, "127.0.0.1", r)), new Promise((r) => nowhere.listen(0, "127.0.0.1", r))]);
+  const T = `http://127.0.0.1:${tunnel.address().port}`;
+  try {
+    let out = "";
+    await new Promise((res) => p.stdout.on("data", (d) => (out += d) && out.includes("HTTP callers") && res()));
+    const tok = readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "token"), "utf8").trim();
+    assert.ok(out.includes(`https://tunnel.example/mcp/${tok}`), "serve prints one paste-ready connector URL");
+    assert.match(out, /No sign-in/);
+    const post = (url, headers = {}, body = { jsonrpc: "2.0", id: 1, method: "tools/list" }) => fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const app = { origin: "https://claude.ai" };
+
+    // What an app does on Connect, end to end through the tunnel.
+    const c = await checkConnector(`${T}/mcp/${tok}`);
+    assert.equal(c.ok, true, c.advice);
+    assert.deepEqual(c.steps.map((s) => s.step), ["initialize", "initialized", "GET", "tools/list", "no sign-in"]);
+    // Header keys work too, with or without "Bearer".
+    for (const h of [{ authorization: `Bearer ${tok}` }, { authorization: tok }, { "x-api-key": tok }, { "x-auth-token": tok }]) assert.equal((await post(`${T}/mcp`, { ...app, ...h })).status, 200, Object.keys(h)[0]);
+
+    // Refusals.
+    assert.equal((await post(`${T}/mcp`, app)).status, 401, "no key");
+    assert.equal((await post(`${T}/mcp/wrong-key`, app)).status, 404, "a wrong key in the path is 'nothing here', not a sign-in prompt");
+    assert.equal((await fetch(`${T}/.well-known/oauth-protected-resource`)).status, 404);
+    assert.equal((await fetch(`${T}/`)).status, 404, "no setup page from the tunnel");
+    assert.equal((await fetch(`${T}/api/state`, { headers: { "x-ca-token": tok } })).status, 404, "no setup API from the tunnel");
+    assert.equal((await post(`http://127.0.0.1:${port}/mcp/${tok}`, app)).status, 403, "locally, a foreign Origin is still refused");
+    const status = (host) => new Promise((res) => request({ host: "127.0.0.1", port, path: `/mcp/${tok}`, method: "POST", headers: { host, "content-type": "application/json" } }, (r) => { let b = ""; r.on("data", (d) => (b += d)); r.on("end", () => res([r.statusCode, b])); }).end("{}"));
+    const [code, body] = await status("old-tunnel.example");
+    assert.equal(code, 403);
+    assert.match(body, /--public-host old-tunnel\.example/, "an unknown host says which flag to restart with");
+
+    // check-url's advice.
+    assert.match((await checkConnector(`${T}/mcp/wrong-key`)).advice, /wrong or old/);
+    assert.match((await checkConnector(`http://127.0.0.1:${nowhere.address().port}/mcp/${tok}`)).advice, /--config empty\.yml/);
+    assert.match((await checkConnector(`${T}/mcp?token=${tok}`)).advice, /path/);
+    const unreachable = await checkConnector(`http://127.0.0.1:1/mcp/${tok}`, { timeoutMs: 3000 });
+    assert.match(unreachable.advice, /can't reach/);
+    assert.ok(!unreachable.advice.includes(tok), "advice never repeats the key");
+  } finally {
+    p.kill();
+    tunnel.close();
+    nowhere.close();
+  }
+});
+
 test("a council asks several agents in parallel and frames each reply", async () => {
   const [r] = await mcp([call(1, "ask", { agents: ["fake", "argv"], prompt: "hey" })]);
   const t = textOf(r);
