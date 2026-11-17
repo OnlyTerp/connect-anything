@@ -40,6 +40,11 @@ function lastFromJsonl(stdout, pick) {
   return { text: found, error };
 }
 
+// Windows caps a whole command line near 32,767 characters. Agents that only take the prompt as an
+// argument get long prompts as an attached file where their CLI supports it, or are refused.
+export const ARG_PROMPT_MAX = 28_000;
+const FILE_TASK = "Your full task is in the attached file. Read all of it, then do it.";
+
 const textOf = (content) =>
   Array.isArray(content)
     ? content
@@ -117,7 +122,7 @@ export const LOCAL_AGENTS = [
   {
     id: "devin",
     name: "Devin (local CLI)",
-    goodFor: "General coding agent; SWE-2 (--model swe-2) is Devin's own fast model.",
+    goodFor: "General coding agent. Pass model \"swe-2\" for Devin's own fast model.",
     readOnly: "enforced",
     install: "Install the Devin CLI: https://docs.devin.ai/cli",
     signIn: "Run `devin auth login`.",
@@ -139,6 +144,7 @@ export const LOCAL_AGENTS = [
     signIn: "Run `cursor-agent login`.",
     locate: () => locate("cursor", "cursor-agent", [cursorNode()].filter(Boolean)) ,
     signedIn: () => null,
+    maxPromptChars: ARG_PROMPT_MAX,
     build: ({ model, write, prompt }) => ({
       // No --approve-mcps: a called Cursor can't use MCP servers, so it can't call back in here.
       args: ["-p", ...(write ? ["--force"] : ["--mode", "ask"]), "--output-format", "json", "--trust", ...(model ? ["--model", model] : []), prompt],
@@ -158,7 +164,10 @@ export const LOCAL_AGENTS = [
     signIn: "Run `opencode auth login`.",
     locate: () => locate("opencode", "opencode"),
     signedIn: () => null,
-    build: ({ model, prompt }) => ({ args: ["run", "--format", "json", ...(model ? ["-m", model] : []), prompt], stdin: false }),
+    build: ({ model, prompt, promptFile }) => ({
+      args: ["run", "--format", "json", ...(model ? ["-m", model] : []), ...(prompt.length > ARG_PROMPT_MAX ? [FILE_TASK, "-f", promptFile] : [prompt])],
+      stdin: false,
+    }),
     parse: (stdout) => {
       let text = "";
       const r = lastFromJsonl(stdout, (o) => {
@@ -178,7 +187,10 @@ export const LOCAL_AGENTS = [
     signIn: "Sign in inside `omp`.",
     locate: () => locate("omp", "omp"),
     signedIn: () => null,
-    build: ({ model, prompt }) => ({ args: ["-p", "--mode", "json", ...(model ? ["--model", model] : []), prompt], stdin: false }),
+    build: ({ model, prompt, promptFile }) => ({
+      args: ["-p", "--mode", "json", ...(model ? ["--model", model] : []), ...(prompt.length > ARG_PROMPT_MAX ? [`@${promptFile}`, FILE_TASK] : [prompt])],
+      stdin: false,
+    }),
     parse: (stdout) => {
       const r = lastFromJsonl(stdout, (o) => {
         if (o.type === "turn_end" && o.message?.role === "assistant") return { text: textOf(o.message.content) };
@@ -194,6 +206,7 @@ export const LOCAL_AGENTS = [
     goodFor: "Nous Research's agent; any provider you configured.",
     readOnly: "none",
     experimental: true,
+    maxPromptChars: ARG_PROMPT_MAX,
     install: "Install Hermes Agent from its project page.",
     signIn: "Run `hermes setup`.",
     locate: () => locate("hermes", "hermes", [isWin ? path.join(LOCAL, "hermes/hermes-agent/venv/Scripts/hermes.exe") : null]),

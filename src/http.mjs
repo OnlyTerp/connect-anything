@@ -37,7 +37,21 @@ const same = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-export function serveHttp({ port = 7777, open = false, allowWrite = false, allowCloud = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST } = {}) {
+/** The first free port from `start` (tries 20). */
+function freePort(start) {
+  return new Promise((resolve, reject) => {
+    const tryPort = (p) => {
+      if (p >= start + 20) return reject(new Error(`No free port between ${start} and ${start + 19}. Pass --port.`));
+      const s = createServer();
+      s.once("error", () => tryPort(p + 1));
+      s.listen(p, "127.0.0.1", () => s.close(() => resolve(p)));
+    };
+    tryPort(start);
+  });
+}
+
+export async function serveHttp({ port = 7777, fixedPort = false, open = false, allowWrite = false, allowCloud = false, publicHost = process.env.CONNECT_ANYTHING_PUBLIC_HOST } = {}) {
+  if (!fixedPort) port = await freePort(port);
   const tok = token();
   const startDir = process.cwd();
   const okHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost.toLowerCase()] : [])]);
@@ -102,7 +116,7 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, allow
           const s = readSettings();
           return send(200, {
             version: VERSION,
-            agents: await core.listAgents(),
+            agents: (await core.listAgents()).map((a) => ({ ...a, group: core.groupOf(a) })),
             harnesses: Object.entries(HARNESSES).map(([id, h]) => ({ id, name: h.name, detected: !!h.detect(), installed: (s.installed || []).includes(id) })),
             jobs: core.recentJobs(10),
             manual: manualConfig(),
@@ -129,6 +143,9 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, allow
           writeSettings({ ...s, disabled: [...disabled] });
           return send(200, { ok: true });
         }
+        if (req.method === "POST" && url.pathname === "/api/doctor") {
+          return send(200, { results: await core.doctor() });
+        }
         if (req.method === "POST" && url.pathname === "/api/ask") {
           const b = await body(req);
           // The page only tries local agents; it never starts paid cloud work.
@@ -152,7 +169,10 @@ export function serveHttp({ port = 7777, open = false, allowWrite = false, allow
     const page = `${u}#t=${tok}`;
     console.log(`  setup page:  ${page}`);
     console.log(`  MCP (HTTP):  ${u}mcp   (Authorization: Bearer <token in ${path.join(home(), "token")}>)`);
-    if (publicHost) console.log(`  also answering as ${publicHost} (your tunnel)`);
+    if (publicHost) {
+      console.log(`  also answering as ${publicHost} (your tunnel)`);
+      console.log(`  Warning: anyone with https://${publicHost}/mcp/<token> can ask your agents. Treat that URL like a password.`);
+    }
     if (!allowWrite) console.log("  HTTP callers are read-only (start with --allow-write to change that).");
     if (!allowCloud) console.log("  HTTP callers can't start cloud agents (start with --allow-cloud to change that).");
     if (open) openBrowser(page);

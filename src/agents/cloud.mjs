@@ -77,35 +77,21 @@ const codexCloud = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Devin Cloud: the Devin CLI's `--cloud -p` when your CLI has it, else Devin's v3 API with a key.
+// Devin Cloud: Devin's official v3 API with a service-user key. (The Devin CLI has no cloud mode.)
 const devinCloud = {
   id: "devin-cloud",
   name: "Devin Cloud",
   kind: "cloud",
   goodFor: "Devin on its own cloud VM (shell, browser, repo clones); good for long tasks and PRs.",
   verified: false,
-  install: "Update the Devin CLI (`devin update`) for `devin --cloud`, or set DEVIN_API_KEY and DEVIN_ORG_ID (Settings → Devin API).",
-  signIn: "Run `devin auth login`, or set DEVIN_API_KEY and DEVIN_ORG_ID.",
-  async mode() {
-    const c = local("devin").command();
-    if (c) {
-      const h = await run(c.command, [...c.prefix, "--help"], { timeoutMs: 20_000 });
-      if (/--cloud\b/.test(h.stdout + h.stderr)) return "cli";
-    }
-    if (process.env.DEVIN_API_KEY && process.env.DEVIN_ORG_ID) return "api";
-    return c ? "cli-too-old" : null;
-  },
+  install: "Set DEVIN_API_KEY and DEVIN_ORG_ID (a service-user key from Devin's settings).",
+  signIn: "Set DEVIN_API_KEY and DEVIN_ORG_ID.",
   async detect() {
-    const m = await this.mode();
-    if (m === "cli") return { installed: true, ready: true, readOnly: "cloud sandbox", note: "via devin --cloud" };
-    if (m === "api") return { installed: true, ready: true, readOnly: "cloud sandbox", note: "via Devin API key, unverified" };
-    if (m === "cli-too-old") return { installed: true, ready: false, readOnly: "cloud sandbox", note: "your Devin CLI has no --cloud yet: run `devin update`, or set DEVIN_API_KEY and DEVIN_ORG_ID" };
-    return { installed: false, ready: false, readOnly: "cloud sandbox" };
+    if (process.env.DEVIN_API_KEY && process.env.DEVIN_ORG_ID) return { installed: true, ready: true, readOnly: "cloud sandbox", note: "via the Devin API, not verified end to end" };
+    return { installed: false, ready: false, readOnly: "cloud sandbox", note: "needs DEVIN_API_KEY and DEVIN_ORG_ID" };
   },
   async start(job) {
-    const m = await this.mode();
-    if (m === "cli") return { runner: true }; // runs like a local job: `devin --cloud -p` waits and prints the answer
-    if (m !== "api") throw new Error(this.install);
+    if (!(process.env.DEVIN_API_KEY && process.env.DEVIN_ORG_ID)) throw new Error(this.install);
     const t = job.repo || job.cwd ? await gitHubTarget(job.cwd, job.repo, job.branch).catch(() => null) : null;
     const res = await devinApi("POST", "/sessions", {
       prompt: job.prompt + handBack(job),
@@ -114,11 +100,6 @@ const devinCloud = {
     });
     return { remoteId: res.session_id, url: res.url, progress: t?.note || "" };
   },
-  build: ({ model, promptFile }) => ({
-    args: ["--cloud", "-p", ...(model ? ["--model", model] : []), "--prompt-file", promptFile],
-    stdin: false,
-  }),
-  parse: (stdout) => ({ text: stdout.trim() }),
   async poll(job) {
     const s = await devinApi("GET", `/sessions/${job.remoteId}`);
     const detail = s.status_detail || "";

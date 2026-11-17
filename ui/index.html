@@ -62,16 +62,18 @@
 <body>
 <main>
   <header><h1>connect<span>·</span>anything</h1><span class="ver">v__CA_VERSION__</span></header>
-  <p class="lede">Let every AI agent you use call the others, each on your own subscription and sign-in. Pick your agents, connect your harnesses and try a call. Nothing here leaves your machine.</p>
+  <p class="lede">Let the coding agent you&rsquo;re in ask your other agents, each through its official CLI on your own sign-in. Pick your agents, connect your apps and try a call. When you ask an agent, your prompt goes to that agent&rsquo;s vendor, as if you ran its CLI yourself.</p>
 
   <section>
     <h2><span class="step">1</span>Your agents</h2>
-    <p class="sub">Found on this computer. Green: installed and signed in. Faded green: installed, but its sign-in can't be checked from outside (a call will say if it's signed out). Turn off any you don't want other agents to call.</p>
-    <div class="grid" id="agents"><p class="note">Looking…</p></div>
+    <p class="sub">Found on this computer. <b>Check agents</b> sends each one a tiny read-only &ldquo;Reply with exactly: OK&rdquo; on your own plan; green means it answered. Turn off any you don&rsquo;t want other agents to call.</p>
+    <div class="row" style="margin-bottom:12px"><button class="primary" id="doctorBtn">Check agents</button><span class="note" id="doctorNote"></span></div>
+    <div class="grid" id="agents"><p class="note">Looking&hellip;</p></div>
+    <p class="note" id="missing"></p>
   </section>
 
   <section>
-    <h2><span class="step">2</span>Connect your harnesses</h2>
+    <h2><span class="step">2</span>Connect your apps</h2>
     <p class="sub">Adds the connect-anything tools and skill to these apps through their own <code>mcp add</code> or config file (a <code>.bak</code> copy is kept). Restart the app afterwards.</p>
     <div class="row" id="harnesses"></div>
     <div class="row" style="margin-top:14px">
@@ -84,15 +86,15 @@
 
   <section>
     <h2><span class="step">3</span>Try it</h2>
-    <p class="sub">Ask one of your agents something. It runs read-only, in the folder this page was started from.</p>
+    <p class="sub">Ask one of your agents something. It runs read-only, in the folder this page was started from. In your coding agent, try: <i>&ldquo;Ask codex and devin to review my staged diff. Where do they disagree?&rdquo;</i></p>
     <div class="row" style="margin-bottom:10px"><select id="tryAgent"></select></div>
-    <textarea id="tryPrompt">In one sentence: what are you, and which model are you running?</textarea>
+    <textarea id="tryPrompt">In two sentences: what does the code in this folder do?</textarea>
     <div class="row" style="margin-top:10px"><button class="primary" id="tryBtn">Ask</button><span class="note" id="tryNote"></span></div>
     <pre id="tryOut" hidden></pre>
   </section>
 
   <section>
-    <h2><span class="step">4</span>Cloud assistants <span class="tag">optional</span></h2>
+    <h2><span class="step">4</span>Cloud assistants <span class="tag">preview</span></h2>
     <p class="sub">Assistants that live in the cloud (ChatGPT, claude.ai, phone apps) can reach these tools over HTTP. Keep that address private.</p>
     <ol class="note" style="padding-left:18px;margin:0">
       <li>Run <code>connect-anything serve</code> (this page's server already does).</li>
@@ -105,7 +107,7 @@
 
   <section>
     <h2><span class="step">·</span>Recent jobs</h2>
-    <pre id="jobs" class="note">—</pre>
+    <pre id="jobs" class="note">-</pre>
   </section>
 </main>
 <script>
@@ -130,15 +132,25 @@ let state;
 async function load() {
   state = await api("/api/state");
   // 1. agents
-  $("agents").innerHTML = state.agents.map((a) => {
-    const unchecked = a.ready && a.signedIn === null;
-    const cls = !a.installed ? "s-missing" : !a.ready ? "s-notready" : unchecked ? "s-unknown" : "s-ready";
-    const word = !a.installed ? "Not installed" : !a.ready ? "Needs setup" : unchecked ? "Installed (sign-in not checked)" : "Ready";
+  const order = { ready: 0, unchecked: 1, failed: 2, setup: 3, preview: 4, off: 5 };
+  const shown = state.agents.filter((a) => a.group !== "missing").sort((x, y) => order[x.group] - order[y.group]);
+  const missing = state.agents.filter((a) => a.group === "missing");
+  $("missing").textContent = missing.length ? `Not installed: ${missing.map((a) => a.name).join(", ")}.` : "";
+  $("agents").innerHTML = shown.map((a) => {
+    const secs = a.check?.ms ? ` in ${(a.check.ms / 1000).toFixed(1)} s` : "";
+    const [cls, word] = {
+      ready: ["s-ready", `Answered${secs}`],
+      unchecked: ["s-unknown", "Installed, not checked"],
+      failed: ["s-notready", "Didn't answer the last check"],
+      setup: ["s-notready", "Needs setup"],
+      preview: ["s-unknown", "Preview: not verified end to end"],
+      off: ["s-missing", "Off"],
+    }[a.group];
     return `<div class="card">
       <div class="top"><b>${esc(a.name)}</b><span class="tag">${a.kind === "cloud" ? "cloud" : "local"}</span></div>
       <span class="status ${cls}"><span class="dot"></span>${word}</span>
       <p>${esc(a.goodFor)}</p>
-      ${a.note ? `<p>${esc(a.note)}</p>` : ""}
+      ${a.group === "failed" ? `<p>${esc(a.check.error)}</p>` : a.note ? `<p>${esc(a.note)}</p>` : ""}
       ${a.readOnly === "none" ? `<p>No read-only mode: callers must allow changes.</p>` : ""}
       ${a.installed ? `<label class="switch"><input type="checkbox" data-agent="${esc(a.id)}" ${a.enabled ? "checked" : ""}> others may call it</label>` : ""}
     </div>`;
@@ -150,7 +162,7 @@ async function load() {
       <span>${esc(h.name)}<small>${h.installed ? "connected" : h.detected ? "found" : "not found"}</small></span></label>`).join("");
   $("manual").textContent = JSON.stringify(state.manual, null, 2);
   // 3. try
-  const ready = state.agents.filter((a) => a.ready && a.enabled && a.kind === "local" && a.readOnly === "enforced" && !a.experimental);
+  const ready = state.agents.filter((a) => (a.group === "ready" || a.group === "unchecked") && a.readOnly === "enforced");
   $("tryAgent").innerHTML = ready.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("") || `<option>No ready local agent</option>`;
   renderJobs(state.jobs);
 }
@@ -162,18 +174,28 @@ async function doInstall(uninstall) {
   if (!ids.length) return;
   const btns = [$("connect"), $("disconnect")];
   btns.forEach((b) => (b.disabled = true));
-  $("installLog").innerHTML = "<li>Working…</li>";
+  $("installLog").innerHTML = "<li>Working...</li>";
   try {
     const { result } = await api("/api/install", { method: "POST", body: JSON.stringify({ harnesses: ids, uninstall }) });
-    $("installLog").innerHTML = result.map((r) => `<li class="${r.ok ? "ok" : "bad"}">${r.ok ? "✓" : "✗"} ${esc(r.harness)}: ${esc(r.message)}</li>`).join("");
+    $("installLog").innerHTML = result.map((r) => `<li class="${r.ok ? "ok" : "bad"}">${r.ok ? "ok" : "x"} ${esc(r.harness)}: ${esc(r.message)}</li>`).join("");
     await load();
   } catch (e) { $("installLog").innerHTML = `<li class="bad">${esc(e.message)}</li>`; }
   btns.forEach((b) => (b.disabled = false));
 }
+$("doctorBtn").onclick = async () => {
+  const b = $("doctorBtn"); b.disabled = true; $("doctorNote").textContent = "Checking (up to a minute)...";
+  try {
+    const { results } = await api("/api/doctor", { method: "POST", body: "{}" });
+    const ok = Object.values(results).filter((r) => r.ok).length;
+    $("doctorNote").textContent = `${ok} of ${Object.keys(results).length} answered.`;
+    await load();
+  } catch (e) { $("doctorNote").textContent = e.message; }
+  b.disabled = false;
+};
 $("connect").onclick = () => doInstall(false);
 $("disconnect").onclick = () => doInstall(true);
 $("tryBtn").onclick = async () => {
-  const b = $("tryBtn"); b.disabled = true; $("tryOut").hidden = false; $("tryOut").textContent = "Asking…"; $("tryNote").textContent = "";
+  const b = $("tryBtn"); b.disabled = true; $("tryOut").hidden = false; $("tryOut").textContent = "Asking..."; $("tryNote").textContent = "";
   const t0 = Date.now();
   try {
     const { job } = await api("/api/ask", { method: "POST", body: JSON.stringify({ agent: $("tryAgent").value, prompt: $("tryPrompt").value }) });
