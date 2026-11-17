@@ -4,6 +4,10 @@
 
 **Let the coding agent you're in ask your other agents.**
 
+![Claude Code asks Devin and Cursor to review a change. Both find the bug that breaks the cart, and Devin also finds a wrong price.](docs/demo.gif)
+
+*A real run, sped up. Every quote is the agent's own words.*
+
 You already pay for Claude Code, Codex, Devin, Cursor, Antigravity. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
 
 ```text
