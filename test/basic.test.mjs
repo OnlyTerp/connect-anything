@@ -251,6 +251,10 @@ test("connector: through a tunnel an app's Origin is fine with the key, no sign-
     assert.match((await checkConnector(`${T}/mcp/wrong-key`)).advice, /wrong or old/);
     assert.match((await checkConnector(`http://127.0.0.1:${nowhere.address().port}/mcp/${tok}`)).advice, /--config empty\.yml/);
     assert.match((await checkConnector(`${T}/mcp?token=${tok}`)).advice, /path/);
+    const rewriter = createServer(fwd(`127.0.0.1:${port}`)); // a tunnel that rewrites Host to localhost
+    await new Promise((r) => rewriter.listen(0, "127.0.0.1", r));
+    assert.match((await checkConnector(`http://127.0.0.1:${rewriter.address().port}/mcp/${tok}`)).advice, /rewrites the Host header/);
+    rewriter.close();
     const unreachable = await checkConnector(`http://127.0.0.1:1/mcp/${tok}`, { timeoutMs: 3000 });
     assert.match(unreachable.advice, /can't reach/);
     assert.ok(!unreachable.advice.includes(tok), "advice never repeats the key");

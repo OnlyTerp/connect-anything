@@ -200,9 +200,9 @@ What has been checked, through a public Cloudflare quick tunnel:
 - Claude Code, given the URL, got Devin's review back from `ask`.
 - A `write: true` call, a folder outside the allowed one, and a wrong key were all refused.
 
-The app steps above follow Claude's and OpenAI's connector docs. Connecting from inside a named assistant app (ChatGPT, Claude, Grok, Gemini) hasn't been tried yet; each needs its custom-connector setting turned on, which is up to you.
+The app steps above follow Claude's and OpenAI's connector docs. Connecting from inside a named assistant app (ChatGPT, Claude, Grok and others) hasn't been tried yet; each needs its custom-connector setting turned on, which is up to you.
 
-Quick-tunnel addresses change every time cloudflared starts. If `serve` was started with an old `--public-host`, requests are refused with the flag to restart with. If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404 (the check says so). Give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
+Quick-tunnel addresses change every time cloudflared starts, and a connector saved with the old address stops working (Claude's connector settings can't be edited, only removed and added again). For a connector you keep, use a tunnel with a fixed hostname. If `serve` was started with an old `--public-host`, requests are refused with the flag to restart with. If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404 (the check says so). Give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
 </details>
 
 ## Where things live

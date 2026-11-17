@@ -32,6 +32,7 @@ function advise(step, r, port) {
     return `${step}: something other than connect-anything answered (HTTP ${r.status}). Check the tunnel points at http://127.0.0.1:${port || 7777}.`;
   }
   if (r.status === 403 && /host/i.test(err)) return `${step}: ${err}`;
+  if (r.status === 403 && /cross-site/i.test(err)) return `${step}: the request arrived as a local one (Host 127.0.0.1 or localhost), where requests from another site are refused. Check the public https URL; if that fails too, your tunnel rewrites the Host header to localhost: set it to pass the public host through (cloudflared quick tunnels do).`;
   if (r.status === 404 || r.status === 401) return `${step}: the key in the URL is wrong or old (it changes if ~/.connect-anything/token is deleted). Copy the connector URL that \`connect-anything serve\` prints now.`;
   return `${step}: HTTP ${r.status}${err ? ` (${err})` : ""}.`;
 }
