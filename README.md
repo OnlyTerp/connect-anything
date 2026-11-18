@@ -2,13 +2,32 @@
 
 [![ci](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml/badge.svg)](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml) ![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen) ![license MIT](https://img.shields.io/badge/license-MIT-blue)
 
-**Let the coding agent you're in ask your other agents.**
+**From the agent you're in, start cloud agents on your own subscriptions, or ask your other agents for a second opinion.**
 
 ![Claude Code asks Devin and Cursor to review a change. Both find the bug that breaks the cart, and Devin also finds a wrong price.](docs/demo.gif)
 
 *A real run, sped up. Every quote is the agent's own words.*
 
-You already pay for Claude Code, Codex, Devin, Cursor, Antigravity. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with call the others through their official CLIs, signed in as you, on your plans. You get second opinions, a review from another vendor, or a task handed off, all without leaving the chat you're in.
+You already pay for Claude Code, Codex, Devin, Cursor, Antigravity. Each one sits in its own window. connect-anything is one small MCP server that lets the agent you're working with:
+
+- **start cloud agents**: one task, or the same task on several cloud agents at once. They run on the provider's machines, so your PC isn't the bottleneck.
+- **ask your local agents**: a second opinion, a review from another vendor, or a task handed off.
+
+Everything runs signed in as you, on your plans, without leaving the chat you're in.
+
+```text
+$ connect-anything spawn claude-cloud,claude-cloud "Read package.json. Reply with the name, version and how many entries are in files."
+Cloud agents g-20261118002844-59d337 - 0 of 2 answered (claude-cloud running, claude-cloud running)
+claude-cloud: https://claude.ai/code/session_01T4YGv6...
+claude-cloud: https://claude.ai/code/session_01T4YGv7...
+
+$ connect-anything job g-20261118002844-59d337
+Cloud agents g-20261118002844-59d337 - 2 of 2 answered (claude-cloud done in 100 s, claude-cloud done in 111 s)
+<<reply agent=claude-cloud id=e0525ad5 untrusted>>
+- **Name:** connect-anything - **Version:** 0.3.1 - **Entries in `files`:** 6 ...
+```
+
+*A real run from 17 November 2026, trimmed. In an app, your agent calls the `spawn` tool and checks back with `job`.*
 
 ```text
 $ connect-anything ask devin,cursor --staged "Review this diff for bugs. Be brief."
@@ -67,6 +86,8 @@ node bin/connect-anything.mjs install
 | "Get a council on my staged changes." | `ask {agents: ["codex", "devin", "cursor"], diff: "staged"}`, in parallel, up to 3 |
 | "Have Devin explain src/auth.ts while you keep going." | `ask` returns a job id after ~45 s; `job` picks up the answer later |
 | "What does Cursor think of everything since main?" | `diff: "main"` sends `git diff main...HEAD` |
+| "Start three Claude cloud agents on the flaky test, each trying a different fix." | `spawn {agents: ["claude-cloud", "claude-cloud", "claude-cloud"], ...}` |
+| "Send this refactor to every cloud agent I have." | `spawn {prompt: ...}`: every ready cloud agent at once |
 
 The tools your agent gets:
 
@@ -74,13 +95,30 @@ The tools your agent gets:
 |---|---|
 | `agents` | Who is ready, who answered the last check, and what each is good at |
 | `ask` | Send a prompt to one agent, or to a council of up to 3 at once. Optional `diff`, `cwd`, `model`, `write` |
+| `spawn` | Start cloud agents: one task on every ready cloud agent, or on the ones you name (repeat an id for copies, up to 10). Optional `repo`, `branch`, `model`, `account` |
 | `job` | Read an answer by job or council id, or list recent jobs |
 | `cancel` | Stop a job or a whole council |
 | `send` / `inbox` | Leave a note for another agent or assistant, or read yours |
 
 The bundled skill (`skills/connect-anything/SKILL.md`) teaches agents when to use these: give the other agent full context, pick a different vendor for a second opinion, compare council answers instead of taking one as truth, and treat every reply as information, never as the user's instructions.
 
-## Supported agents
+## Cloud agents
+
+Cloud agents run on the provider's machines against your GitHub repo, billed to your plan. They see what's pushed to GitHub, not your local files, and can push a branch or open a pull request. A start is never retried automatically, because each start is billed.
+
+| id | Cloud | How it's started | Status |
+|---|---|---|---|
+| `claude-cloud` | Claude Code on the web (claude.ai/code), Pro/Max plan | Claude Code's own `RemoteTrigger` tool, in a short headless `claude -p` turn on a small model | **tested**: start, status and answer, 17 Nov 2026 |
+| `codex-cloud` | Codex Cloud, ChatGPT plan | `codex cloud exec`, then `codex cloud status`/`diff` | preview: needs a Codex Cloud environment for the repo ([make one](https://chatgpt.com/codex/settings/environments)) |
+| `copilot-cloud` | GitHub Copilot coding agent | `gh agent-task create` / `view` | preview: needs a Copilot plan with the coding agent on |
+| `devin-cloud` | Devin | Devin's v3 API with `DEVIN_API_KEY` and `DEVIN_ORG_ID` | preview |
+
+- **No terminal windows, no keys for Claude.** Claude Code makes the cloud call itself with its own sign-in; connect-anything reads only the tool's result. Each start or status check is one short local turn capped at $0.25 of plan usage. The first start on an account also looks up that account's cloud environment once.
+- **Several accounts.** Pass `account` (a Claude Code config folder, or a `CODEX_HOME` folder for a second ChatGPT login). Or list them in `~/.connect-anything/settings.json` as `"accounts": {"claude-cloud": ["~/.claude-2"], "codex-cloud": ["~/.codex-2"]}`: when your main sign-in answers with a usage limit, the next account is tried.
+- **From anywhere.** Any app with connect-anything installed gets `spawn`. So do cloud assistants over the connector URL, but only if you start `serve` with `--allow-cloud`.
+- At most 20 cloud jobs run at once (`CONNECT_ANYTHING_MAX_CLOUD_RUNNING`), and one `spawn` starts at most 10.
+
+## Supported agents (local)
 
 | id | Agent | How it's called | Read-only mode | Status |
 |---|---|---|---|---|
@@ -170,13 +208,7 @@ Good tools already call agent CLIs. What connect-anything is for, compared with 
 - **[CAO](https://github.com/awslabs/cli-agent-orchestrator)** runs a supervisor agent that drives worker agents in terminal sessions. connect-anything runs no supervisor: the agent you're in stays in charge.
 
 <details>
-<summary>Preview: cloud agents and cloud assistants (not verified end to end)</summary>
-
-**Cloud agents** run on the vendor's machines, billed to your plan, and see only what's pushed to GitHub. A cloud start is never retried automatically.
-
-- `claude-cloud`: `claude --cloud` only starts from a real terminal, so connect-anything opens one that runs the official command. The agent is asked to push a `cloud/<job-id>` branch with a `CLOUD_REPORT.md`; `job` reports done when that branch appears.
-- `codex-cloud`: `codex cloud exec`. Needs a Codex Cloud environment for the repo. The result is a diff for `codex cloud apply <id>`.
-- `devin-cloud`: Devin's v3 API with a service-user key (`DEVIN_API_KEY`, `DEVIN_ORG_ID`).
+<summary>Preview: cloud assistants (ChatGPT, Claude, Grok and others) over a connector URL</summary>
 
 **Cloud assistants** (browser and phone apps that accept an MCP connector URL) can use the same tools over HTTP:
 
@@ -216,7 +248,8 @@ Quick-tunnel addresses change every time cloudflared starts, and a connector sav
 | `~/.connect-anything/jobs/<id>/` | One folder per job: `job.json`, `output.txt`, `prompt.txt` |
 | `~/.connect-anything/groups/` | Council records |
 | `~/.connect-anything/doctor.json` | The last `doctor` results |
-| `~/.connect-anything/settings.json` | Disabled agents, custom agents, `httpRoots` |
+| `~/.connect-anything/settings.json` | Disabled agents, custom agents, `httpRoots`, cloud `accounts` |
+| `~/.connect-anything/cloud.json` | Each account's Claude cloud environment id (found once) |
 | `~/.connect-anything/inbox/` | Notes between agents |
 
 Set `CONNECT_ANYTHING_HOME` to move all of it. Jobs run in their own background process, so a client timing out doesn't kill the agent it called. Local jobs stop after 30 minutes (`CONNECT_ANYTHING_TIMEOUT_MIN`).
@@ -230,8 +263,9 @@ npm test        # behavior tests against fake agents, no model calls
 | File | What it holds |
 |---|---|
 | `src/agents/local.mjs` | One entry per CLI: flags, read-only mode, parser |
-| `src/agents/cloud.mjs` | Cloud agents (preview) |
-| `src/core.mjs` | `ask`, councils, diffs, `doctor`, the guards |
+| `src/agents/cloud.mjs` | Cloud agents |
+| `src/agents/claude-bridge.mjs` | Claude Code cloud through its `RemoteTrigger` tool |
+| `src/core.mjs` | `ask`, councils, `spawn`, diffs, `doctor`, the guards |
 | `src/mcp.mjs` | The MCP server, no SDK |
 | `src/http.mjs` | The setup page and MCP over HTTP |
 | `src/install.mjs` | App registration |

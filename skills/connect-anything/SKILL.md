@@ -31,7 +31,7 @@ You can ask the user's other agents. Each runs through its own CLI, on the user'
 - **Read-only by default.** Pass `write: true` only when the user asked for changes to be made. Agents with no read-only mode (OpenCode, OMP, Hermes) refuse to run without it.
 - **One hop only.** An agent you call can't call further agents. If you were called this way, `ask` refuses: answer with what you have.
 - **Plans are the user's.** Every ask uses a little of that agent's plan. Don't fan out to every agent by default; a council of 2 is usually enough.
-- **Cloud agents are a preview.** `claude-cloud`, `codex-cloud` and `devin-cloud` work from what's pushed to GitHub, spend the user's plan, and are not verified end to end. Start one only when the user asks for cloud work, and never start the same task twice.
+- **Cloud agents spend the user's plan.** `spawn` starts `claude-cloud` (tested), `codex-cloud`, `copilot-cloud` and `devin-cloud` (preview). They work from what's pushed to GitHub, so say so if the user has unpushed changes. Start them only when the user asks for cloud work. Never start the same task twice: give back the links, and read the answers later with `job`. For a swarm, repeat an id (up to 10) and give each copy a different angle in its prompt when the user wants variety.
 
 ## Without MCP (any harness with a shell)
 

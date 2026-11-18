@@ -41,6 +41,9 @@ const HELP = () => `connect-anything ${VERSION}: let the coding agent you're in 
       --model M      pick a model    --cwd DIR   folder to work in
       --repo o/n --branch B          cloud agents: which GitHub repo/branch
       --wait S       seconds to wait before giving back an id (default: until done)
+  connect-anything spawn [<agent>,...] <task>
+                                         start cloud agents on your plans (every ready one if none named;
+                                         repeat an id for several copies). --repo o/n --branch B --model M --account DIR
   connect-anything job [<id>] [--wait S] status / answer of a job or council; no id lists recent jobs
   connect-anything cancel <id>           stop a job or council
   connect-anything send <to> <text> [--from NAME]   leave a message in an inbox
@@ -101,6 +104,16 @@ async function main() {
       }
       console.log(core.describeJob(job));
       process.exitCode = job?.status === "failed" || (job?.kind === "group" && !job.members.some((m) => m.status === "done")) ? 1 : 0;
+      return;
+    }
+    case "spawn": {
+      let [first, ...words] = f._;
+      const named = first && /^[a-z0-9-]+(,[a-z0-9-]+)*$/i.test(first) && first.split(",").every((id) => core.isCloudId(id));
+      let prompt = (named ? words : [first, ...words]).filter(Boolean).join(" ");
+      if (!prompt && !process.stdin.isTTY) prompt = await readStdin();
+      if (!prompt) return console.log("Usage: connect-anything spawn [claude-cloud,codex-cloud,...] <task>   (or pipe the task on stdin)");
+      const g = await core.spawnCloud({ agents: named ? first.split(",") : undefined, prompt, cwd: f.cwd, model: f.model, repo: f.repo, branch: f.branch, account: f.account, wait_s: f.wait !== undefined ? Number(f.wait) : 20, caller: "cli" });
+      console.log(core.describeJob(g));
       return;
     }
     case "job": {

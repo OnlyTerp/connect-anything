@@ -67,7 +67,7 @@ const textOf = (r) => r.result.content[0].text;
 test("handshake and tool list", async () => {
   const [init, list] = await mcp([{ id: 1, method: "initialize", params: { protocolVersion: "2025-03-26" } }, { method: "notifications/initialized" }, { id: 2, method: "tools/list" }]);
   assert.equal(init.result.protocolVersion, "2025-03-26");
-  assert.deepEqual(list.result.tools.map((t) => t.name), ["agents", "ask", "job", "cancel", "send", "inbox"]);
+  assert.deepEqual(list.result.tools.map((t) => t.name), ["agents", "ask", "spawn", "job", "cancel", "send", "inbox"]);
   const ask = list.result.tools.find((t) => t.name === "ask");
   assert.equal(ask.annotations.destructiveHint, true);
 });
@@ -289,6 +289,28 @@ test("a council refuses cloud agents and more than 3 agents", async () => {
   assert.match(textOf(a), /a council only asks local agents/);
   const [b] = await mcp([call(2, "ask", { agents: ["fake", "argv", "okbot", "mute"], prompt: "x" })]);
   assert.equal(b.result.isError, true);
+});
+
+test("spawn starts only cloud agents, caps the count, and is off over HTTP without --allow-cloud", async () => {
+  const [a] = await mcp([call(1, "spawn", { agents: ["fake"], prompt: "x" })]);
+  assert.equal(a.result.isError, true);
+  assert.match(textOf(a), /not a cloud agent/);
+  const [b] = await mcp([call(2, "spawn", { agents: Array(11).fill("claude-cloud"), prompt: "x" })]);
+  assert.match(textOf(b), /at most 10/);
+  const [c] = await mcp([call(3, "spawn", { agents: ["nope-cloud"], prompt: "x" })]);
+  assert.match(textOf(c), /Unknown agent/);
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const p = spawn(process.execPath, [BIN, "serve", "--port", String(port)], { env: process.env, stdio: ["ignore", "pipe", "inherit"] });
+  try {
+    await new Promise((res) => p.stdout.on("data", (d) => String(d).includes("setup page") && res()));
+    const tok = readFileSync(path.join(process.env.CONNECT_ANYTHING_HOME, "token"), "utf8").trim();
+    const r = await fetch(`http://127.0.0.1:${port}/mcp/${tok}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call(1, "spawn", { prompt: "hi" })) });
+    const j = await r.json();
+    assert.equal(j.result.isError, true);
+    assert.match(j.result.content[0].text, /--allow-cloud/);
+  } finally {
+    p.kill();
+  }
 });
 
 test("forged reply markers inside an answer are defused", async () => {

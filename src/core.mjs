@@ -47,7 +47,8 @@ export async function listAgents() {
       } catch (e) {
         state = { installed: false, ready: false, note: String(e.message || e) };
       }
-      const preview = a.kind === "cloud" || !!state.experimental;
+      // A cloud agent stays a preview until a real spawn, status and result passed on it.
+      const preview = (a.kind === "cloud" && !a.verified) || !!state.experimental;
       return { id: a.id, name: a.name, kind: a.kind, goodFor: a.goodFor, enabled: !disabled.has(a.id), readOnly: a.readOnly, preview, check: checks[a.id] || null, ...state };
     }),
   );
@@ -58,6 +59,7 @@ export function groupOf(a) {
   if (!a.enabled) return "off";
   if (!a.installed) return "missing";
   if (a.preview) return "preview";
+  if (a.kind === "cloud") return a.ready ? "cloud" : "setup";
   if (!a.ready) return "setup";
   if (a.check?.ok) return "ready";
   if (a.check && !a.check.ok) return "failed";
@@ -80,6 +82,7 @@ export function describeAgents(list, { all = false } = {}) {
   };
   section("Ready (answered a check):", by.ready, (a) => line(a, ` - answered in ${secs(a.check.ms)}, ${a.check.checkedAt.slice(0, 10)}`));
   section("Installed, not checked yet (run `connect-anything doctor`):", by.unchecked, (a) => line(a));
+  section("Cloud agents, ready to `spawn` (they run on the provider's machines, on your plan):", by.cloud, (a) => line(a));
   section("Did not answer the last check:", by.failed, (a) => line(a, ` - ${String(a.check.error || "no answer").slice(0, 160)}`));
   section("Installed, needs setup:", by.setup, (a) => line(a, ` - ${a.note || "sign in first"}`));
   section("Preview (not verified end to end):", by.preview, (a) => line(a, a.installed ? (a.ready ? "" : ` - ${a.note || "not ready"}`) : ` - ${a.note || "not set up"}`));
@@ -140,7 +143,7 @@ export async function doctor({ only = null, onResult = () => {} } = {}) {
 // Asking
 
 /** Check everything about one agent call and start its job. Throws a clear error otherwise. */
-async function startOne({ agent, prompt, cwd, model, write = false, repo, branch, caller }) {
+async function startOne({ agent, prompt, cwd, model, write = false, repo, branch, account, caller }) {
   const a = getAgent(agent);
   if (!a) throw new Error(`Unknown agent "${agent}". Call \`agents\` to see the ids.`);
   if (!prompt?.trim()) throw new Error("The prompt is empty.");
@@ -166,7 +169,7 @@ async function startOne({ agent, prompt, cwd, model, write = false, repo, branch
   const state = await a.detect();
   if (!state.installed) throw new Error(`${a.name} is not installed. ${a.install || ""}`.trim());
   if (!state.ready) throw new Error(`${a.name} is not ready: ${state.note || "sign in first"}. ${a.signIn || ""}`.trim());
-  return startJob({ agent: a.id, kind: a.kind, prompt, cwd: dir, model: model || null, write: !!write, repo: repo || null, branch: branch || null, caller: caller || null, depth: depth + 1 });
+  return startJob({ agent: a.id, kind: a.kind, prompt, cwd: dir, model: model || null, write: !!write, repo: repo || null, branch: branch || null, account: account || null, caller: caller || null, depth: depth + 1 });
 }
 
 /** Running jobs of one kind: local ones share this machine, cloud ones don't. */
@@ -207,6 +210,47 @@ export async function ask(args) {
   if (!group.jobs.length) throw new Error(group.errors.map((e) => `${e.agent}: ${e.error}`).join("\n"));
   writeGroup(group);
   return getGroup(group.id, clampWait(wait_s, 45));
+}
+
+export const isCloudId = (id) => getAgent(String(id).trim())?.kind === "cloud";
+
+/** How many cloud agents one `spawn` may start. */
+export const MAX_SPAWN = Number(process.env.CONNECT_ANYTHING_MAX_SPAWN || 10);
+
+/**
+ * Start the same task on cloud agents: the ones named in `agents` (an id may repeat, to start
+ * several copies), or every cloud agent that is ready. Returns a group to check with `job`.
+ */
+export async function spawnCloud(args) {
+  const { prompt, wait_s } = args;
+  if (!prompt?.trim()) throw new Error("The task is empty.");
+  let ids = args.agents == null ? null : (Array.isArray(args.agents) ? args.agents : String(args.agents).split(",")).map((s) => String(s).trim()).filter(Boolean);
+  const skipped = [];
+  if (!ids?.length) {
+    const all = (await listAgents()).filter((a) => a.kind === "cloud" && a.enabled);
+    ids = all.filter((a) => a.installed && a.ready).map((a) => a.id);
+    for (const a of all.filter((x) => !(x.installed && x.ready))) skipped.push({ agent: a.id, error: `not set up: ${a.note || "sign in first"}` });
+    if (!ids.length) throw new Error(`No cloud agent is ready.\n${skipped.map((s) => `  ${s.agent}: ${s.error}`).join("\n")}`);
+  }
+  ids = ids.map((s) => getAgent(s)?.id || s);
+  if (ids.length > MAX_SPAWN) throw new Error(`spawn starts at most ${MAX_SPAWN} cloud agents at once; got ${ids.length}.`);
+  for (const id of ids) {
+    const a = getAgent(id);
+    if (!a) throw new Error(`Unknown agent "${id}". Call \`agents\` to see the ids.`);
+    if (a.kind !== "cloud") throw new Error(`${a.name} is not a cloud agent. Use \`ask\` for local agents.`);
+  }
+  const group = { id: newGroupId(), spawn: true, agents: ids, jobs: [], errors: [...skipped], caller: args.caller || null, createdAt: new Date().toISOString() };
+  for (const id of ids) {
+    try {
+      const job = await startOne({ ...args, agent: id, prompt });
+      group.jobs.push(job.id);
+    } catch (e) {
+      group.errors.push({ agent: id, error: String(e?.message || e) });
+    }
+  }
+  if (!group.jobs.length) throw new Error(group.errors.map((e) => `${e.agent}: ${e.error}`).join("\n"));
+  writeGroup(group);
+  return getGroup(group.id, clampWait(wait_s, 20));
 }
 
 async function withDiff(prompt, mode, cwd, agentIds) {
@@ -296,8 +340,8 @@ export async function getGroup(id, wait_s = 0) {
 
 /** Read a cloud job's status from its provider, at most every 20 s. */
 async function pollCloud(job) {
-  if (job.lastPoll && Date.now() - job.lastPoll < 20_000) return job;
   const a = getAgent(job.agent);
+  if (job.lastPoll && Date.now() - job.lastPoll < (a?.pollEveryMs || 20_000)) return job;
   try {
     const r = await a.poll(job);
     return patchJob(job.id, { ...r, lastPoll: Date.now(), ...(isFinal(r) ? { endedAt: new Date().toISOString() } : {}) });
@@ -343,7 +387,9 @@ export function describeJob(job) {
 function describeGroup(g) {
   const done = g.members.filter((j) => j.status === "done");
   const states = g.members.map((j) => `${j.agent} ${j.status}${isFinal(j) ? took(j) : ""}`).join(", ");
-  const parts = [`Council ${g.id} - ${done.length} of ${g.agents.length} answered${states ? ` (${states})` : ""}`, ""];
+  const parts = [`${g.spawn ? "Cloud agents" : "Council"} ${g.id} - ${done.length} of ${g.agents.length} answered${states ? ` (${states})` : ""}`, ""];
+  for (const j of g.members) if (j.url && !isFinal(j)) parts.push(`${j.agent}: ${j.url}`);
+  if (g.members.some((j) => j.url && !isFinal(j))) parts.push("");
   for (const j of g.members) {
     if (j.status === "done") parts.push(frame(j.agent, j.result ?? readOutput(j.id)), "");
     else if (j.status === "failed") parts.push(`${j.agent} failed: ${j.error || "no answer"}`, "");

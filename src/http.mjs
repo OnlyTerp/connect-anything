@@ -227,8 +227,11 @@ function roots(startDir) {
 
 /** Enforce the HTTP rules on an MCP tool call before it reaches the core. */
 function restrict(m, { allowWrite, allowCloud, roots: rs }) {
-  if (m?.method !== "tools/call" || m.params?.name !== "ask") return m;
+  if (m?.method !== "tools/call" || !["ask", "spawn"].includes(m.params?.name)) return m;
   const a = { ...(m.params.arguments || {}) };
+  if (m.params.name === "spawn" && !allowCloud) {
+    throw new Error("Over HTTP, cloud agents are off (they spend your plan and push branches). Restart `connect-anything serve` with --allow-cloud to allow them.");
+  }
   if (getAgent(a.agent)?.kind === "cloud" && !allowCloud) {
     throw new Error("Over HTTP, cloud agents are off (they spend your plan and push branches). Restart `connect-anything serve` with --allow-cloud to allow them.");
   }
