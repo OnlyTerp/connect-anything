@@ -14,7 +14,7 @@ You can ask the user's other agents. Each runs through its own CLI, on the user'
    - **The other agent has none of your context.** Put everything it needs in the prompt: the goal, the files and paths, the constraints, and what you want back.
    - `diff: "staged" | "uncommitted" | "<base>"` attaches that git diff (`<base>` means `git diff <base>...HEAD`). Use it for reviews instead of pasting code.
    - It returns the answer, or a job / council id if the agent is still working after `wait_s` (default 45; use 50 at most).
-   - `spawn {prompt}` starts cloud agents on the user's plans: every ready one, or `agents: ["claude-cloud", "claude-cloud", "codex-cloud"]` (repeat an id for several copies, up to 10). Pass `repo`/`branch` if cwd is not the repo. It returns links at once; the work takes minutes to hours.
+   - `spawn {prompt}` starts cloud agents on the user's plans: every ready one, or `agents: ["claude-cloud", "claude-cloud", "codex-cloud"]` (repeat an id for several copies, up to 10). Pass `repo`/`branch` if cwd is not the repo. A start takes about a minute, then you get the session links; the work takes minutes to hours.
 3. `job {id, wait_s: 50}`: get the answer for a job or council id. Call it again if still running. Don't spin. `job` with no id lists recent jobs.
 4. `cancel {id}`: stop a job or a whole council.
 5. `send {to, from, text}` and `inbox {name}`: leave notes for other agents or assistants that share this connect-anything.

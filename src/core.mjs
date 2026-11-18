@@ -250,7 +250,7 @@ export async function spawnCloud(args) {
   }
   if (!group.jobs.length) throw new Error(group.errors.map((e) => `${e.agent}: ${e.error}`).join("\n"));
   writeGroup(group);
-  return getGroup(group.id, clampWait(wait_s, 20));
+  return getGroup(group.id, clampWait(wait_s, 50));
 }
 
 async function withDiff(prompt, mode, cwd, agentIds) {

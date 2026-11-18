@@ -108,13 +108,15 @@ Cloud agents run on the provider's machines against your GitHub repo, billed to 
 
 | id | Cloud | How it's started | Status |
 |---|---|---|---|
-| `claude-cloud` | Claude Code on the web (claude.ai/code), Pro/Max plan | Claude Code's own `RemoteTrigger` tool, in a short headless `claude -p` turn on a small model | **tested**: start, status and answer, 17 Nov 2026 |
+| `claude-cloud` | Claude Code on the web (claude.ai/code), Pro/Max plan | Claude Code's own `RemoteTrigger` tool, in a short headless `claude -p` turn on a small model | **tested** on Windows: start, status and answer, 17 Nov 2026 |
 | `codex-cloud` | Codex Cloud, ChatGPT plan | `codex cloud exec`, then `codex cloud status`/`diff` | preview: needs a Codex Cloud environment for the repo ([make one](https://chatgpt.com/codex/settings/environments)) |
 | `copilot-cloud` | GitHub Copilot coding agent | `gh agent-task create` / `view` | preview: needs a Copilot plan with the coding agent on |
 | `devin-cloud` | Devin | Devin's v3 API with `DEVIN_API_KEY` and `DEVIN_ORG_ID` | preview |
 
-- **No terminal windows, no keys for Claude.** Claude Code makes the cloud call itself with its own sign-in; connect-anything reads only the tool's result. Each start or status check is one short local turn capped at $0.25 of plan usage. The first start on an account also looks up that account's cloud environment once.
-- **Several accounts.** Pass `account` (a Claude Code config folder, or a `CODEX_HOME` folder for a second ChatGPT login). Or list them in `~/.connect-anything/settings.json` as `"accounts": {"claude-cloud": ["~/.claude-2"], "codex-cloud": ["~/.codex-2"]}`: when your main sign-in answers with a usage limit, the next account is tried.
+- **No terminal windows, no keys for Claude.** Claude Code makes the cloud call itself with its own sign-in; connect-anything reads only the tool's result. A start is two or three short local turns on a small model (about a minute), and each status check is one more; each turn is capped at $0.25 of plan usage.
+- **One setup step for Claude.** The account needs a cloud environment, which connect-anything finds from your existing routines. If you have never made one, make any one-off routine once (`/schedule` in Claude Code), or set `"claudeEnvironment"` in `~/.connect-anything/settings.json`.
+- **Housekeeping.** Each Claude start leaves a turned-off routine named `connect-anything <job>` at claude.ai/code/routines; delete old ones there. Answers come back as plain text, flattened to one paragraph; the full session is at its link.
+- **Several accounts (preview).** List extra sign-ins in `~/.connect-anything/settings.json` as `"accounts": {"claude-cloud": ["~/.claude-2"], "codex-cloud": ["~/.codex-2"]}` (Claude Code config folders, `CODEX_HOME` folders). When your main sign-in answers with a usage limit, the next one is tried; `account` picks one of them. Not yet tested across real accounts.
 - **From anywhere.** Any app with connect-anything installed gets `spawn`. So do cloud assistants over the connector URL, but only if you start `serve` with `--allow-cloud`.
 - At most 20 cloud jobs run at once (`CONNECT_ANYTHING_MAX_CLOUD_RUNNING`), and one `spawn` starts at most 10.
 

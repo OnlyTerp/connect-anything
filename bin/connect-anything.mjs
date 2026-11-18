@@ -112,7 +112,7 @@ async function main() {
       let prompt = (named ? words : [first, ...words]).filter(Boolean).join(" ");
       if (!prompt && !process.stdin.isTTY) prompt = await readStdin();
       if (!prompt) return console.log("Usage: connect-anything spawn [claude-cloud,codex-cloud,...] <task>   (or pipe the task on stdin)");
-      const g = await core.spawnCloud({ agents: named ? first.split(",") : undefined, prompt, cwd: f.cwd, model: f.model, repo: f.repo, branch: f.branch, account: f.account, wait_s: f.wait !== undefined ? Number(f.wait) : 20, caller: "cli" });
+      const g = await core.spawnCloud({ agents: named ? first.split(",") : undefined, prompt, cwd: f.cwd, model: f.model, repo: f.repo, branch: f.branch, account: f.account, wait_s: f.wait !== undefined ? Number(f.wait) : 50, caller: "cli" });
       console.log(core.describeJob(g));
       return;
     }

@@ -75,7 +75,9 @@ export async function remoteTrigger(input, { configDir, timeoutMs = 180_000 } = 
     throw new Error(`Claude Code did not make the cloud call${why ? `: ${why}` : ""}. Is it signed in (\`claude auth login\`)?`);
   }
   if (JSON.stringify(sortKeys(usedInput)) !== JSON.stringify(sortKeys(input))) {
-    throw new Error("Claude Code changed the request before sending it, so connect-anything stopped. Try again.");
+    const e = new Error("Claude Code changed the request before sending it, so connect-anything stopped. Try again.");
+    e.sent = usedInput;
+    throw e;
   }
   // A large result is saved to a file and the tool returns its path instead.
   const saved = result.match(/<persisted-output>[\s\S]*?saved to:\s*(\S+)/i);

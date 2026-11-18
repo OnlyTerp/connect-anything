@@ -7,6 +7,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { home, readSettings } from "../home.mjs";
@@ -177,6 +178,10 @@ const claudeCloud = {
     const t = await gitHubTarget(job.cwd, job.repo, job.branch);
     const opts = { configDir: account || undefined };
     const envId = await cachedEnvironment(opts);
+    if (!envId)
+      throw new Error(
+        "Claude cloud: this account has no cloud environment that connect-anything can find yet. Make one routine once (in Claude Code, run /schedule and create any one-off task, or at claude.ai/code/routines), or set \"claudeEnvironment\" in ~/.connect-anything/settings.json, then ask again.",
+      );
     const model = job.model ? CLAUDE_MODELS[job.model.toLowerCase()] || job.model : undefined;
     const text = `Work on branch \`${t.branch}\` of https://github.com/${t.slug}.\n\n${job.prompt}` + handBack(job);
     const body = {
@@ -186,7 +191,7 @@ const claudeCloud = {
       clear_mcp_connections: true,
       job_config: {
         ccr: {
-          ...(envId ? { environment_id: envId } : {}),
+          environment_id: envId,
           session_context: { ...(model ? { model } : {}), sources: [{ git_repository: { url: `https://github.com/${t.slug}`, revision: t.branch } }] },
           events: [{ data: { uuid: randomUUID(), session_id: "", type: "user", parent_tool_use_id: null, message: { role: "user", content: text } } }],
         },
@@ -199,6 +204,8 @@ const claudeCloud = {
     const r = await remoteTrigger({ action: "run", trigger_id: trigger }, opts);
     if (!ok(r)) throw failure("run", r);
     const sid = [r.json?.session_id, r.json?.session?.id, r.json?.id].find((x) => /^(cse_|session_)/.test(String(x || "")));
+    // Turn the routine off so its far-future schedule never fires a second, billed run.
+    await remoteTrigger({ action: "update", trigger_id: trigger, body: { enabled: false } }, opts).catch(() => null);
     return {
       remoteId: sid || trigger,
       url: sessionLink(sid),
@@ -295,8 +302,10 @@ const LIMITED = /rate.?limit|usage.?limit|quota|too many requests|limit (reached
  * default sign-in first, then `accounts` in settings.json) while each one says it is at its limit.
  */
 async function eachAccount(job, id, start) {
-  const extra = readSettings().accounts?.[id] || [];
-  const list = job.account ? [job.account] : [null, ...extra];
+  const extra = (readSettings().accounts?.[id] || []).map(expandHome);
+  if (job.account && !extra.includes(expandHome(job.account)))
+    throw new Error(`Account "${job.account}" is not listed for ${id}. Add it to "accounts" in ~/.connect-anything/settings.json first.`);
+  const list = job.account ? [expandHome(job.account)] : [null, ...extra];
   let last;
   for (const account of list) {
     try {
@@ -309,8 +318,12 @@ async function eachAccount(job, id, start) {
   throw new Error(`${last.message}${list.length > 1 ? ` (tried ${list.length} accounts; all are at their limit)` : ""}`);
 }
 
+const expandHome = (p) => path.resolve(String(p).replace(/^~(?=[\\/]|$)/, os.homedir()));
+
 /** One environment lookup per account, kept in ~/.connect-anything/cloud.json. */
 async function cachedEnvironment(opts) {
+  const set = readSettings().claudeEnvironment;
+  if (set && !opts.configDir) return set;
   const f = path.join(home(), "cloud.json");
   let s = {};
   try {

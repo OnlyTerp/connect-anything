@@ -55,7 +55,7 @@ export const TOOLS = [
   {
     name: "spawn",
     description:
-      "Start cloud agents on the user's own plans (Claude Code cloud, Codex Cloud, GitHub Copilot, Devin): the same task on every ready cloud agent, or on the ones in `agents` (repeat an id to start several copies). They work on the GitHub repo of cwd (or `repo`), not local files. Returns links right away; check answers later with `job`.",
+      "Start cloud agents on the user's own plans (Claude Code cloud, Codex Cloud, GitHub Copilot, Devin): the same task on every ready cloud agent, or on the ones in `agents` (repeat an id to start several copies). They work on the GitHub repo of cwd (or `repo`), not local files. claude-cloud is tested; the others are preview. Each start takes about a minute; this returns the session links once they exist (or an id), and you read the answers later with `job`.",
     inputSchema: {
       type: "object",
       properties: {
@@ -65,8 +65,8 @@ export const TOOLS = [
         branch: { type: "string", description: "Branch to start from. Defaults to the cwd's branch." },
         cwd: { type: "string", description: "A local clone of the repo. Defaults to the server's folder." },
         model: { type: "string", description: "Optional model, e.g. opus or sonnet for Claude." },
-        account: { type: "string", description: "Optional: which sign-in to use (a Claude Code config folder or a CODEX_HOME folder). By default the main sign-in, then the accounts in settings.json when one is at its limit." },
-        wait_s: { type: "number", description: "Seconds to wait before returning (0-50, default 20)." },
+        account: { type: "string", description: "Optional (preview): one of the accounts listed in settings.json (a Claude Code config folder or a CODEX_HOME folder). By default the main sign-in, then those accounts when one is at its limit." },
+        wait_s: { type: "number", description: "Seconds to wait for the starts before returning (0-50, default 50)." },
       },
       required: ["prompt"],
       additionalProperties: false,
