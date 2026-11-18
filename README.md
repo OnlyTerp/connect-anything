@@ -1,6 +1,6 @@
 # connect-anything
 
-[![ci](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml/badge.svg)](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml) ![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen) ![license MIT](https://img.shields.io/badge/license-MIT-blue)
+[![ci](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml/badge.svg)](https://github.com/OnlyTerp/connect-anything/actions/workflows/ci.yml) ![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen) ![license Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 **From the agent you're in, start cloud agents on your own subscriptions, or ask your other agents for a second opinion.**
 
@@ -276,4 +276,4 @@ Adding a CLI is one entry in `local.mjs`: take its flags from `--help` and its p
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](LICENSE).
