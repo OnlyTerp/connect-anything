@@ -112,6 +112,16 @@ export const HARNESSES = {
     detect: () => !!cmdOf("grok"),
     install: (o) => viaCli("grok", ["mcp", "add", "-s", "user", NAME, "--", SERVER.command, ...SERVER.args], ["mcp", "remove", "-s", "user", NAME], o),
   },
+  muse: {
+    name: "Muse Code",
+    detect: () => !!cmdOf("muse"),
+    install: (o) => viaCli("muse", ["mcp", "add", NAME, "--user", "--", SERVER.command, ...SERVER.args], ["mcp", "remove", NAME, "--user"], o),
+  },
+  qwen: {
+    name: "Qwen Code",
+    detect: () => !!cmdOf("qwen") || existsSync(path.join(home(), ".qwen")),
+    install: (o) => editJson(path.join(home(), ".qwen", "settings.json"), mcpServersEntry(o.uninstall), o),
+  },
   antigravity: {
     name: "Antigravity (agy)",
     detect: () => !!cmdOf("antigravity"),

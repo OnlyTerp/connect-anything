@@ -401,3 +401,18 @@ test("antigravity: read-only = plan mode + request-review permissions, prompt bo
   const denied = ag.parse(JSON.stringify({ status: "SUCCESS", response: "", denied_actions: [{ action: "command", display_name: "Bash" }] }));
   assert.ok(denied.error.includes("Bash"), "an empty answer cut off by a denied tool is an error, not an empty reply");
 });
+
+test("Muse, Qwen and ZCode replies are read from their real output shapes", async () => {
+  const { LOCAL_AGENTS } = await import("../src/agents/local.mjs");
+  const get = (id) => LOCAL_AGENTS.find((a) => a.id === id);
+  // Muse: the last line of a real `muse exec --json` run (17 Nov 2026), trimmed.
+  const muse = '{"payload_type":"run.usage","payload":{"kind":"run_usage"}}\n{"payload_type":"run.terminal.completed","payload":{"kind":"run_terminal","terminal":"completed","text":"OK","reason":null}}\n';
+  assert.deepEqual(get("muse").parse(muse), { text: "OK" });
+  assert.match(get("muse").parse('{"payload_type":"run.terminal.completed","payload":{"kind":"run_terminal","terminal":"failed","reason":"limit"}}').error, /limit/);
+  assert.equal(get("muse").readOnly, "none");
+  assert.deepEqual(get("qwen").parse('[{"type":"system"},{"type":"result","result":"OK"}]'), { text: "OK" });
+  assert.deepEqual(get("qwen").parse('{"response":"OK"}'), { text: "OK" });
+  assert.deepEqual(get("zcode").parse('noise {"response":"OK","sessionId":"s"}'), { text: "OK" });
+  assert.deepEqual(get("qwen").build({ write: false }).args.slice(-2), ["--approval-mode", "plan"]);
+  assert.ok(get("zcode").build({ prompt: "x", promptFile: "P", write: false, cwd: "." }).args.includes("plan"));
+});

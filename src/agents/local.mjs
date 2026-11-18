@@ -55,6 +55,47 @@ const textOf = (content) =>
       ? content
       : null;
 
+/** The most recently changed file in `dir` whose name matches `re`, or null. */
+function newest(dir, re) {
+  try {
+    return (
+      readdirSync(dir)
+        .filter((n) => re.test(n))
+        .map((n) => ({ p: path.join(dir, n), m: statSync(path.join(dir, n)).mtimeMs }))
+        .sort((x, y) => y.m - x.m)[0]?.p || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** ZCode's CLI runs inside its desktop app's runtime and reads the app's own provider settings. */
+function zcodeEnv() {
+  const env = { ELECTRON_RUN_AS_NODE: "1" };
+  const v2 = path.join(HOME, ".zcode", "v2");
+  if (existsSync(path.join(v2, "provider_config.json"))) env.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE = path.join(v2, "provider_config.json");
+  let best = null;
+  const walk = (dir, depth) => {
+    let entries = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory() && depth < 4) walk(p, depth + 1);
+      else if (e.name === "zcode-builtin.json") {
+        const m = statSync(p).mtimeMs;
+        if (!best || m > best.m) best = { p, m };
+      }
+    }
+  };
+  walk(path.join(v2, "runtime", "provider"), 0);
+  if (best) env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE = best.p;
+  return env;
+}
+
 export const LOCAL_AGENTS = [
   {
     id: "claude",
@@ -219,6 +260,86 @@ export const LOCAL_AGENTS = [
     signedIn: () => null,
     build: ({ model, prompt }) => ({ args: ["-z", prompt, ...(model ? ["-m", model] : [])], stdin: false }),
     parse: (stdout) => ({ text: stdout.trim() }),
+  },
+  {
+    id: "muse",
+    name: "Muse Code",
+    goodFor: "Meta's Muse Code agent, on your Muse plan.",
+    // `muse exec` wrote a file even with --approval-mode untrusted (checked 17 Nov 2026), so it has
+    // no read-only mode we can rely on: it needs write: true.
+    readOnly: "none",
+    install: "Install Muse Code from Meta.",
+    signIn: "Run `muse login`.",
+    // On Windows `muse` is a PowerShell launcher; run the newest installed binary it would run.
+    locate: () => locate("muse", "muse", [isWin ? newest(path.join(LOCAL, "Programs/muse"), /^muse-bin-.*\.exe$/i) : null]),
+    signedIn: () => null,
+    build: ({ model, promptFile }) => ({ args: ["exec", "--json", ...(model ? ["--model", model] : []), "--prompt-file", promptFile], stdin: false }),
+    parse: (stdout) => {
+      const r = lastFromJsonl(stdout, (o) => {
+        if (o.payload_type !== "run.terminal.completed" && o.payload?.kind !== "run_terminal") return null;
+        const p = o.payload || {};
+        return p.terminal === "completed" ? { text: p.text ?? "" } : { error: p.reason || `Muse run ended: ${p.terminal}` };
+      });
+      return r.text != null ? { text: r.text } : { error: r.error || "Muse Code gave no answer" };
+    },
+  },
+  {
+    id: "qwen",
+    name: "Qwen Code",
+    goodFor: "Alibaba's Qwen Code agent, on your Qwen sign-in.",
+    readOnly: "enforced",
+    experimental: true,
+    install: "Install: npm i -g @qwen-code/qwen-code",
+    signIn: "Run `qwen` once and sign in.",
+    locate: () => locate("qwen", "qwen"),
+    signedIn: () => null,
+    build: ({ model, write }) => ({
+      args: ["--output-format", "json", "--approval-mode", write ? "yolo" : "plan", ...(model ? ["-m", model] : [])],
+      stdin: true,
+    }),
+    parse: (stdout) => {
+      const i = stdout.search(/[[{]/);
+      let v;
+      try {
+        v = JSON.parse(stdout.slice(i));
+      } catch {
+        const r = lastFromJsonl(stdout, (o) => (o.type === "result" ? (o.is_error ? { error: o.result || "error" } : { text: o.result }) : null));
+        return r.text != null ? { text: r.text } : { error: r.error || stdout.trim() || "Qwen Code gave no answer" };
+      }
+      const last = Array.isArray(v) ? [...v].reverse().find((m) => m?.type === "result") : v;
+      if (last?.is_error || last?.error) return { error: String(last.result || last.error?.message || last.error) };
+      const text = last?.result ?? last?.response;
+      return typeof text === "string" ? { text } : { error: "Qwen Code gave no answer" };
+    },
+  },
+  {
+    id: "zcode",
+    name: "ZCode (Z.ai)",
+    goodFor: "Z.ai's ZCode agent with GLM models, on your Z.ai plan.",
+    readOnly: "enforced",
+    experimental: true,
+    install: "Install the ZCode desktop app from Z.ai.",
+    signIn: "Open ZCode once and sign in.",
+    locate: () => {
+      const exe = isWin ? path.join(LOCAL, "Programs/ZCode/ZCode.exe") : null;
+      const cjs = isWin ? path.join(LOCAL, "Programs/ZCode/resources/glm/zcode.cjs") : null;
+      return exe && existsSync(exe) && existsSync(cjs) ? { command: exe, prefix: [cjs] } : null;
+    },
+    signedIn: () => null,
+    build: ({ prompt, promptFile, write, cwd, model }) => ({
+      args: ["--prompt", prompt.length > ARG_PROMPT_MAX ? `Your full task is in the file ${promptFile}. Read all of it, then do it.` : prompt, "--cwd", cwd, "--mode", write ? "yolo" : "plan", "--output-format", "json", ...(model ? ["--model", model] : [])],
+      stdin: false,
+      env: zcodeEnv(),
+    }),
+    parse: (stdout) => {
+      const i = stdout.indexOf("{");
+      try {
+        const o = JSON.parse(stdout.slice(i, stdout.lastIndexOf("}") + 1));
+        return typeof o.response === "string" ? { text: o.response } : { error: o.error?.message || o.error || "ZCode gave no answer" };
+      } catch {
+        return { error: stdout.trim().slice(-300) || "ZCode gave no answer" };
+      }
+    },
   },
   {
     id: "grok",

@@ -47,7 +47,7 @@ Skipping `price === 0` is reasonable if free lines should not affect the total. 
 
 *A real run from 17 November 2026, trimmed. Both agents found the crash and disagreed about the skip; your agent sees both answers and can weigh them.*
 
-- **One MCP server, one skill.** Add it to Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok or Claude Desktop, or call it from any shell.
+- **One MCP server, one skill.** Add it to Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok, Muse Code, Qwen Code or Claude Desktop, or call it from any shell. Cloud assistants such as Grokbot, Muse AI, ChatGPT and Claude can reach it through a connector URL.
 - **Your own sign-ins.** Each agent runs through its own CLI, logged in as you. No API keys, and connect-anything never reads another tool's tokens.
 - **Read-only by default.** Write access is opt-in per call. Agents with no read-only mode refuse to run without it.
 - **Zero dependencies.** Plain Node 18 or newer. Nothing to compile.
@@ -133,6 +133,9 @@ Cloud agents run on the provider's machines against your GitHub repo, billed to 
 | `opencode` | OpenCode | `opencode run --format json` | none: needs `write: true` | preview |
 | `hermes` | Hermes Agent | `hermes -z` | none: needs `write: true` | preview |
 | `grok` | Grok CLI | `grok --prompt-file` | plan mode | preview (did not answer headless in our check) |
+| `muse` | Muse Code (Meta) | `muse exec --json --prompt-file` | none: needs `write: true` (its untrusted mode still wrote a file) | tested, CLI 1.4.23 |
+| `zcode` | ZCode (Z.ai, GLM models) | the ZCode app's `zcode.cjs --mode plan --output-format json` | plan mode | preview (started, but our run hit provider errors) |
+| `qwen` | Qwen Code | `qwen --output-format json --approval-mode plan`, prompt on stdin | plan mode | preview (not installed in our check) |
 
 *Tested* means a real call went through connect-anything and came back right, on Windows 11, in November 2026. CI runs the test suite on Windows, macOS and Linux, but real agent calls were only made on Windows: reports from macOS and Linux are very welcome ([open one here](https://github.com/OnlyTerp/connect-anything/issues/new?template=agent-report.yml)).
 
@@ -210,7 +213,7 @@ Good tools already call agent CLIs. What connect-anything is for, compared with 
 - **[CAO](https://github.com/awslabs/cli-agent-orchestrator)** runs a supervisor agent that drives worker agents in terminal sessions. connect-anything runs no supervisor: the agent you're in stays in charge.
 
 <details>
-<summary>Preview: cloud assistants (ChatGPT, Claude, Grok and others) over a connector URL</summary>
+<summary>Preview: cloud assistants (Grokbot, Muse AI, ChatGPT, Claude and others) over a connector URL</summary>
 
 **Cloud assistants** (browser and phone apps that accept an MCP connector URL) can use the same tools over HTTP:
 
@@ -238,7 +241,7 @@ What has been checked, through a public Cloudflare quick tunnel:
 - Claude Code, given the URL, got Devin's review back from `ask`.
 - A `write: true` call, a folder outside the allowed one, and a wrong key were all refused.
 
-The app steps above follow Claude's and OpenAI's connector docs. Connecting from inside a named assistant app (ChatGPT, Claude, Grok and others) hasn't been tried yet; each needs its custom-connector setting turned on, which is up to you.
+The app steps above follow Claude's and OpenAI's connector docs. Connecting from inside a named assistant app (Grokbot, Muse AI, ChatGPT, Claude and others) hasn't been tried yet; each needs its custom-connector setting turned on, which is up to you.
 
 Quick-tunnel addresses change every time cloudflared starts, and a connector saved with the old address stops working (Claude's connector settings can't be edited, only removed and added again). For a connector you keep, use a tunnel with a fixed hostname. If `serve` was started with an old `--public-host`, requests are refused with the flag to restart with. If you already have a `~/.cloudflared/config.yml` with `ingress` rules, `cloudflared tunnel --url` follows those rules instead and answers 404 (the check says so). Give the quick tunnel an empty config: `cloudflared tunnel --config empty.yml --url http://127.0.0.1:7777`.
 </details>

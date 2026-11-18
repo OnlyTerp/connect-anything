@@ -50,6 +50,7 @@ async function runLocal(job, agent) {
   const spec = agent.build({ prompt, promptFile, model: job.model, write: job.write, cwd: job.cwd });
   const env = { ...process.env, CONNECT_ANYTHING_DEPTH: String(job.depth || 1), CONNECT_ANYTHING_CALLER: job.agent };
   for (const k of spec.unsetEnv || []) delete env[k];
+  Object.assign(env, spec.env || {});
   const r = await run(c.command, [...c.prefix, ...spec.args], {
     input: spec.stdin ? prompt : undefined,
     cwd: job.cwd,
